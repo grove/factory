@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "interface_version": "1.1",
+  "distribution_version": "1.1.0",
+  "source": {
+    "repository": "https://github.com/grove/sfstack",
+    "commit": "88e521dcca5997c95819eb1427766af9bca70048"
+  },
+  "artifact": {
+    "path": "vendor/sfstack_contracts-1.1.0-py3-none-any.whl",
+    "sha256": "f917983dafbfc1956ff53917bda6489581a6c65389051af98dfd4d5108abf56c"
+  },
+  "dependencies_sha256": "cf3694c6b951c099f49370f82931d9ef019b4d13d82f78f340d30f1ed437b8eb",
+  "distribution_kind": "vendored wheel built from the recorded source commit; not a published PyPI release",
+  "build": {
+    "source_date_epoch": 1795217339,
+    "python": "3.12.14",
+    "setuptools": "84.2.1",
+    "wheel": "0.48.0",
+    "command": "SOURCE_DATE_EPOCH=1795217339 python -m pip wheel --no-deps --no-build-isolation --wheel-dir OUTPUT ."
+  }
+}

@@ -1,0 +1,2 @@
+# Install the complete host environment with: python tools/bootstrap_contracts.py
+-r requirements-runtime.txt

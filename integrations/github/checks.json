@@ -1,0 +1,8 @@
+[
+  {
+    "id": "regressions",
+    "kind": "unittest",
+    "command": ["python", "-m", "unittest", "discover", "-s", "tests", "-v"],
+    "criterion": "The factory host regression suite executes substantive tests with no failures, errors, or skips."
+  }
+]
