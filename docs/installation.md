@@ -74,3 +74,36 @@ host tests and positive/negative regressions before accepting the new pin.
 
 Never accept an unpinned package, a mutable source branch, or a candidate-supplied
 CLI path as a substitute for the trusted controller dependency.
+
+## Reuse Quality Factory in sfstack (manual-only pilot)
+
+A thin workflow in `grove/sfstack` named
+`.github/workflows/sfstack-quality.yml` can invoke this reusable workflow by
+an **immutable full commit SHA**. The first pilot is deliberately
+`workflow_dispatch` only: it does not install the automatic PR signal,
+coordinator, or Software Factory.
+
+The caller must use the exact workflow filename `sfstack-quality.yml` and
+`run-name: sfstack quality / PR #<number> / request manual`. The publisher
+checks the caller's Actions run ID, attempt, filename, display title, default
+branch, and head SHA before writing a check. The reused jobs check out the
+**factory** controller from `job.workflow_repository` at
+`job.workflow_sha`, while the candidate, API reads, artifacts and
+`sfstack quality` check belong to the **caller** repository. The Agentic
+Workflows nested review is loaded from the same factory revision using the
+GitHub.com self-reference `$/` syntax, not the caller's checkout.
+
+The caller grants `contents: read`, `pull-requests: read`,
+`actions: read`, and `checks: write`, and passes only
+`COPILOT_GITHUB_TOKEN` from its own Actions secrets. Do not call from
+`pull_request` events or expose its credential to candidate code.
+The default `checks.json` executes `python -m unittest discover -s tests -v`
+on the pinned candidate, which also works for the initial sfstack pilot;
+other repositories need a separately reviewed project-specific check policy.
+
+**Not part of this phase:** automatic PR triggers, base-push invalidation
+coordination, unattended check reconciliation, cross-repository publication
+tokens, Software Factory, or an enforced GitHub merge rule. A green check is
+not itself permission to merge. The manual workflow is only a bounded
+integration pilot; later automation must add caller-local event coordination
+without weakening run ownership, tests, or human review.

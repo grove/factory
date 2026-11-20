@@ -437,7 +437,9 @@ class GitHubWorkflowBoundaryTests(unittest.TestCase):
                 self.assertNotIn("path: candidate", job)
                 self.assertNotIn("quality.py", job)
                 self.assertNotIn("COPILOT_GITHUB_TOKEN", job)
-                self.assertEqual(job.count("uses: actions/checkout@"), job.count("ref: ${{ github.workflow_sha }}"))
+                self.assertEqual(job.count("uses: actions/checkout@"), job.count("ref: ${{ job.workflow_sha }}"))
+                self.assertEqual(job.count("ref: ${{ job.workflow_sha }}"),
+                                 job.count("repository: ${{ job.workflow_repository }}"))
                 self.assertNotIn("persist-credentials: true", job)
         for job in coordinator.values():
             self.assertNotIn("download-artifact", job)
