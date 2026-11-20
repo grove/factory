@@ -15,7 +15,7 @@ versioned `sfstack-contract` CLI; it does not import sfstack's private modules.
 
 ## Start here
 
-- [Install and validate the host](docs/installation.md).
+- [Install and validate the host](docs/installation.md), including manual cross-repository Quality reuse.
 - [Assess an existing pull request](docs/how-to/run-github.md).
 - [Build a bounded change or reproduce and repair a defect](docs/how-to/run-software-factory.md).
 - [Review the migration boundary and remaining live acceptance](docs/migration.md).
