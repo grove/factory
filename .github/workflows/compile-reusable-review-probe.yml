@@ -5,7 +5,7 @@ on:
     branches: [fix/inline-review-prompt-20261121]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   compile:
@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          persist-credentials: false
+          persist-credentials: true
       - name: Read pinned compiler identity
         run: |
           python - <<'PY'
@@ -48,6 +48,96 @@ jobs:
           Path('compiled-report.json').write_text(json.dumps(report, indent=2)+'\n')
           print(json.dumps(report, indent=2))
           PY
+      - name: Verify the inlined prompt and callee checkout
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('.github/workflows/sfstack-review.md').read_text()
+          lock = Path('.github/workflows/sfstack-review.lock.yml').read_text()
+          assert 'inlined-imports: true' in source
+          assert '"author_file"' not in lock
+          assert 'GH_AW_PROMPT_CONTENT_0004' in lock
+          assert 'Perform the bounded' in lock
+          for part in [
+              'repository: 
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: review-compile-probe
+          path: |
+            .github/workflows/sfstack-review.lock.yml
+            .github/aw/actions-lock.json
+            compiled-report.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 2
+ + '{{ job.workflow_repository }}',
+              'ref: 
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: review-compile-probe
+          path: |
+            .github/workflows/sfstack-review.lock.yml
+            .github/aw/actions-lock.json
+            compiled-report.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 2
+ + '{{ job.workflow_sha }}',
+              'ref: 
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: review-compile-probe
+          path: |
+            .github/workflows/sfstack-review.lock.yml
+            .github/aw/actions-lock.json
+            compiled-report.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 2
+ + '{{ inputs.head-sha }}',
+          ]:
+              assert part in lock, part
+          assert 'ref: 
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: review-compile-probe
+          path: |
+            .github/workflows/sfstack-review.lock.yml
+            .github/aw/actions-lock.json
+            compiled-report.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 2
+ + '{{ github.workflow_sha }}' not in lock
+          print('Self-contained prompt and callee-bound agent controller verified.')
+          PY
+      - name: Commit only generated lock files to the isolated fix branch
+        env:
+          EXPECTED_REPO: grove/factory
+          EXPECTED_REF: refs/heads/fix/inline-review-prompt-20261121
+        run: |
+          test "$GITHUB_REPOSITORY" = "$EXPECTED_REPO"
+          test "$GITHUB_REF" = "$EXPECTED_REF"
+          git diff --check -- .github/workflows/sfstack-review.lock.yml .github/aw/actions-lock.json
+          git add -- .github/workflows/sfstack-review.lock.yml .github/aw/actions-lock.json
+          if git diff --cached --quiet; then
+            echo 'Compiler output already matches the branch.'
+          else
+            for file in $(git diff --cached --name-only); do
+              case "$file" in
+                .github/workflows/sfstack-review.lock.yml|.github/aw/actions-lock.json) ;;
+                *) echo "Unexpected staged path" >&2; exit 1 ;;
+              esac
+            done
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'build(review): regenerate exact self-contained gh-aw lock'
+            git push origin HEAD:refs/heads/fix/inline-review-prompt-20261121
+          fi
       - name: Upload compiled review lock for independent inspection
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
