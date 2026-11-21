@@ -15,6 +15,9 @@ permissions:
   actions: read
   copilot-requests: none
 engine: copilot
+# Embed the reviewed author prompt in the compiled lock: cross-repo callers
+# cannot resolve factory/.github files from the caller's empty activation workspace.
+inlined-imports: true
 timeout-minutes: 10
 max-turns: 20
 tools:
@@ -62,7 +65,8 @@ safe-outputs:
 steps:
   - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
     with:
-      ref: ${{ github.workflow_sha }}
+      repository: ${{ job.workflow_repository }}
+      ref: ${{ job.workflow_sha }}
       path: controller
       persist-credentials: false
   - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262

@@ -72,6 +72,22 @@ class ReusableQualityBoundaryTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     Host(api, current).trusted_context(QUALITY, {"workflow_dispatch"})
 
+    def test_copilot_review_prompt_is_self_contained_and_uses_callee_controller(self):
+        # gh-aw activation must not try to load a Factory-authored .md file
+        # from an empty caller repository workspace. The agent's controller
+        # checkout must also resolve the called Factory SHA, not caller main.
+        authored = (ROOT / ".github/workflows/sfstack-review.md").read_text()
+        compiled = (ROOT / ".github/workflows/sfstack-review.lock.yml").read_text()
+        self.assertIn("inlined-imports: true", authored)
+        self.assertIn("repository: $" + "{{ job.workflow_repository }}", authored)
+        self.assertIn("ref: $" + "{{ job.workflow_sha }}", authored)
+        self.assertNotIn("ref: $" + "{{ github.workflow_sha }}", authored)
+        self.assertIn("repository: $" + "{{ job.workflow_repository }}", compiled)
+        self.assertIn("ref: $" + "{{ job.workflow_sha }}", compiled)
+        self.assertIn("GH_AW_PROMPT_CONTENT_0004", compiled)
+        self.assertIn("Perform the bounded", compiled)
+        self.assertNotIn(r'\\"author_file\\"', compiled)
+
     def test_reusable_callee_source_and_nested_workflow_are_sha_bound(self):
         source = (ROOT / ".github/workflows/sfstack-quality.yml").read_text()
         self.assertIn("  workflow_call:\n", source)
