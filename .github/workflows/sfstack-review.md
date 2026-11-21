@@ -65,7 +65,8 @@ safe-outputs:
 steps:
   - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
     with:
-      ref: ${{ github.workflow_sha }}
+      repository: ${{ job.workflow_repository }}
+      ref: ${{ job.workflow_sha }}
       path: controller
       persist-credentials: false
   - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262

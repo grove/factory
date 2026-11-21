@@ -107,3 +107,37 @@ tokens, Software Factory, or an enforced GitHub merge rule. A green check is
 not itself permission to merge. The manual workflow is only a bounded
 integration pilot; later automation must add caller-local event coordination
 without weakening run ownership, tests, or human review.
+
+## Self-contained GitHub Agentic Workflows reviewer
+
+The first real cross-repository Quality assessment
+[run #44918424600](https://github.com/grove/sfstack/actions/runs/44918424600)
+confirmed authenticated admission, exact-head candidate verification and access
+to the Copilot credential. The compiled Agentic Workflows reviewer then failed
+in **activation before an agent ran** with:
+
+```
+ERR_CONFIG: ERR_SYSTEM: Failed to resolve runtime import path
+.github/workflows/sfstack-review.md: ENOENT
+```
+
+The source Markdown belongs to `grove/factory`, while GitHub supplies the
+caller repository workspace during `workflow_call`. It must not be copied to
+each caller or retrieved from a mutable branch. The authored review now sets
+`inlined-imports: true`, which causes the **pinned gh-aw compiler** to embed
+the author-reviewed prompt directly in the lock file. This removes the
+runtime dependence on the caller's `.github` directory. See
+[gh-aw self-contained lock files](https://github.github.com/gh-aw/reference/imports/#self-contained-lock-files-inlined-imports-true).
+
+The review's host-owned `steps` also check out the Factory controller from
+`job.workflow_repository` at `job.workflow_sha` instead of
+`github.workflow_sha`, which is the **caller** default-branch commit during a
+reusable call. The candidate remains checked out from the caller repository
+at the authenticated PR head. The strict compiler output and negative
+boundary tests are required evidence before this change can be installed.
+
+The failed run correctly published a `sfstack quality` **failure** on the
+original candidate head. This change does not retroactively pass it, replace
+a missing human review, or permit automatic merging. After reviewing this
+factory PR, update the pin in the caller repository through a second reviewed
+PR and repeat the manual test; do not force push or replace the old run.
