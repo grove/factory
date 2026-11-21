@@ -67,27 +67,23 @@ jobs:
           assert 'ref: $' + '{{ github.workflow_sha }}' not in lock
           print('Self-contained prompt and callee-bound agent controller verified.')
           PY
-      - name: Commit only generated lock files to the isolated fix branch
+      - name: Store compiled output outside workflow directory for audited promotion
         env:
           EXPECTED_REPO: grove/factory
           EXPECTED_REF: refs/heads/fix/inline-review-prompt-20261121
         run: |
           test "$GITHUB_REPOSITORY" = "$EXPECTED_REPO"
           test "$GITHUB_REF" = "$EXPECTED_REF"
-          git diff --check -- .github/workflows/sfstack-review.lock.yml .github/aw/actions-lock.json
-          git add -- .github/workflows/sfstack-review.lock.yml .github/aw/actions-lock.json
+          mkdir -p .factory-compile-output
+          cp .github/workflows/sfstack-review.lock.yml .factory-compile-output/sfstack-review.lock.yml
+          cp .github/aw/actions-lock.json .factory-compile-output/actions-lock.json
+          git add -- .factory-compile-output/sfstack-review.lock.yml .factory-compile-output/actions-lock.json
           if git diff --cached --quiet; then
-            echo 'Compiler output already matches the branch.'
+            echo 'Compiler output already stored for promotion.'
           else
-            for file in $(git diff --cached --name-only); do
-              case "$file" in
-                .github/workflows/sfstack-review.lock.yml|.github/aw/actions-lock.json) ;;
-                *) echo "Unexpected staged path" >&2; exit 1 ;;
-              esac
-            done
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git commit -m 'build(review): regenerate exact self-contained gh-aw lock'
+            git commit -m 'test(review): save vetted compiler output outside .github workflows'
             git push origin HEAD:refs/heads/fix/inline-review-prompt-20261121
           fi
       - name: Upload compiled review lock for independent inspection
