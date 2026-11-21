@@ -4,6 +4,7 @@ The reusable workflow's controller checkout must be bound to the callee SHA,
 but checks and run provenance must be verified against the caller repository.
 """
 from pathlib import Path
+import re
 import unittest
 
 from integrations.github.automation import Host, QUALITY
@@ -104,7 +105,10 @@ class ReusableQualityBoundaryTests(unittest.TestCase):
         # Only the PR-change handoff may dispatch a new (paid) review.
         self.assertIn("      actions: write", source)
         for job_name in ("invalidate", "reconcile"):
-            job = source.split("  " + job_name + ":\n", 1)[1].split("\n  ", 1)[0]
+            job = source.split("  " + job_name + ":\n", 1)[1]
+            # Match the next *top-level* job heading, not the indentation
+            # of this job's own name, if, runs-on, or permissions.
+            job = re.split(r"(?m)^  [a-z_]+:\n", job, maxsplit=1)[0]
             self.assertNotIn("actions: write", job)
             self.assertIn("checks: write", job)
         self.assertIn("github.event.workflow_run.head_repository.full_name == github.repository", source)
