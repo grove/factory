@@ -90,9 +90,9 @@ class ReusableQualityBoundaryTests(unittest.TestCase):
 
     def test_reusable_event_controller_runs_callee_code_with_caller_events(self):
         source = (ROOT / ".github/workflows/sfstack-quality-events.yml").read_text()
-        self.assertIn("  workflow_call:\\n", source)
-        self.assertIn("  workflow_run:\\n", source)
-        self.assertIn("  push:\\n    branches: [main]", source)
+        self.assertIn("  workflow_call:\n", source)
+        self.assertIn("  workflow_run:\n", source)
+        self.assertIn("  push:\n    branches: [main]", source)
         self.assertIn("workflows: [sfstack PR signal, sfstack GitHub quality]", source)
         self.assertIn("types: [in_progress, completed]", source)
         # Three metadata-only jobs, never a candidate checkout or model token.
@@ -104,7 +104,7 @@ class ReusableQualityBoundaryTests(unittest.TestCase):
         # Only the PR-change handoff may dispatch a new (paid) review.
         self.assertIn("      actions: write", source)
         for job_name in ("invalidate", "reconcile"):
-            job = source.split("  " + job_name + ":\\n", 1)[1].split("\\n  ", 1)[0]
+            job = source.split("  " + job_name + ":\n", 1)[1].split("\n  ", 1)[0]
             self.assertNotIn("actions: write", job)
             self.assertIn("checks: write", job)
         self.assertIn("github.event.workflow_run.head_repository.full_name == github.repository", source)
