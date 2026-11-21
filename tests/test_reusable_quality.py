@@ -88,6 +88,30 @@ class ReusableQualityBoundaryTests(unittest.TestCase):
         self.assertIn("Perform the bounded", compiled)
         self.assertNotIn(r'\\"author_file\\"', compiled)
 
+    def test_reusable_event_controller_runs_callee_code_with_caller_events(self):
+        source = (ROOT / ".github/workflows/sfstack-quality-events.yml").read_text()
+        self.assertIn("  workflow_call:\\n", source)
+        self.assertIn("  workflow_run:\\n", source)
+        self.assertIn("  push:\\n    branches: [main]", source)
+        self.assertIn("workflows: [sfstack PR signal, sfstack GitHub quality]", source)
+        self.assertIn("types: [in_progress, completed]", source)
+        # Three metadata-only jobs, never a candidate checkout or model token.
+        self.assertEqual(3, source.count("repository: $" + "{{ job.workflow_repository }}"))
+        self.assertEqual(3, source.count("ref: $" + "{{ job.workflow_sha }}"))
+        self.assertNotIn("ref: $" + "{{ github.workflow_sha }}", source)
+        self.assertNotIn("path: candidate", source)
+        self.assertNotIn("COPILOT_GITHUB_TOKEN", source)
+        # Only the PR-change handoff may dispatch a new (paid) review.
+        self.assertIn("      actions: write", source)
+        for job_name in ("invalidate", "reconcile"):
+            job = source.split("  " + job_name + ":\\n", 1)[1].split("\\n  ", 1)[0]
+            self.assertNotIn("actions: write", job)
+            self.assertIn("checks: write", job)
+        self.assertIn("github.event.workflow_run.head_repository.full_name == github.repository", source)
+        self.assertIn("github.event.workflow_run.path == '.github/workflows/sfstack-pr-signal.yml'", source)
+        self.assertIn("github.event.workflow_run.path == '.github/workflows/sfstack-quality.yml'", source)
+        self.assertIn("group: sfstack-quality-publication-$" + "{{ github.repository }}", source)
+
     def test_reusable_callee_source_and_nested_workflow_are_sha_bound(self):
         source = (ROOT / ".github/workflows/sfstack-quality.yml").read_text()
         self.assertIn("  workflow_call:\n", source)

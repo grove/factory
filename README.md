@@ -21,8 +21,9 @@ versioned `sfstack-contract` CLI; it does not import sfstack's private modules.
 - [Review the migration boundary and remaining live acceptance](docs/migration.md).
 - [Run the deterministic host regressions](evals/README.md).
 
-The initial deployment runs in the repository containing these workflows. It
-does not provide a central cross-repository service. Its existing limits on
+The host operates on the **calling** repository's own issues, pull requests,
+checks and credentials. It can be installed locally or called through pinned
+reusable workflows; it is not a central cross-repository service. Its existing limits on
 editable paths, candidate identity, credentials, and human approval remain in
 effect.
 

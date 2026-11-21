@@ -437,17 +437,14 @@ class GitHubWorkflowBoundaryTests(unittest.TestCase):
                 self.assertNotIn("path: candidate", job)
                 self.assertNotIn("quality.py", job)
                 self.assertNotIn("COPILOT_GITHUB_TOKEN", job)
-                # Only the reusable Quality controller checks out factory code
-                # at the called workflow's SHA. The caller-local event coordinator
-                # continues to use its own workflow SHA and must not be changed.
-                if name in ("start_check", "publish"):
-                    self.assertEqual(job.count("uses: actions/checkout@"),
-                                     job.count("ref: ${{ job.workflow_sha }}"))
-                    self.assertEqual(job.count("ref: ${{ job.workflow_sha }}"),
-                                     job.count("repository: ${{ job.workflow_repository }}"))
-                else:
-                    self.assertEqual(job.count("uses: actions/checkout@"),
-                                     job.count("ref: ${{ github.workflow_sha }}"))
+                # Both reusable controllers select their own reviewed Factory
+                # checkout, never caller main. GitHub API/run/check identity
+                # remains bound to the authenticated caller repository.
+                self.assertEqual(job.count("uses: actions/checkout@"),
+                                 job.count("ref: ${{ job.workflow_sha }}"))
+                self.assertEqual(job.count("ref: ${{ job.workflow_sha }}"),
+                                 job.count("repository: ${{ job.workflow_repository }}"))
+                self.assertNotIn("ref: ${{ github.workflow_sha }}", job)
                 self.assertNotIn("persist-credentials: true", job)
         for job in coordinator.values():
             self.assertNotIn("download-artifact", job)
