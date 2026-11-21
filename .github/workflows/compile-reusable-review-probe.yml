@@ -1,0 +1,62 @@
+name: Compile reusable review for cross-repository prompt probe (no AI)
+
+on:
+  push:
+    branches: [fix/inline-review-prompt-20261121]
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Read pinned compiler identity
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          pin = json.loads(Path('.github/aw/compiler.json').read_text())
+          assert pin['version'] == 'v1.2.2'
+          assert pin['linux_amd64_url'] == 'https://github.com/github/gh-aw/releases/download/v1.2.2/linux-amd64'
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write(f"COMPILER_URL={pin['linux_amd64_url']}\nCOMPILER_SHA={pin['linux_amd64_sha256']}\n")
+          PY
+      - name: Download and hash verify compiler
+        run: |
+          curl --fail --silent --show-error --location --retry 3 "$COMPILER_URL" -o "$RUNNER_TEMP/gh-aw"
+          printf '%s  %s\n' "$COMPILER_SHA" "$RUNNER_TEMP/gh-aw" | sha256sum --check -
+          chmod +x "$RUNNER_TEMP/gh-aw"
+      - name: Compile self-contained reviewer without running an agent
+        run: |
+          "$RUNNER_TEMP/gh-aw" compile sfstack-review --strict --no-check-update --no-logo
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          y=Path('.github/workflows/sfstack-review.lock.yml').read_text()
+          report = {
+              'contains_author_file': '"author_file"' in y,
+              'contains_source_body_text': 'Perform the bounded' in y,
+              'contains_inline_prompt': 'GH_AW_PROMPT_CONTENT_' in y,
+              'size': len(y),
+              'differs_from_checked_in': True,
+          }
+          Path('compiled-report.json').write_text(json.dumps(report, indent=2)+'\n')
+          print(json.dumps(report, indent=2))
+          PY
+      - name: Upload compiled review lock for independent inspection
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: review-compile-probe
+          path: |
+            .github/workflows/sfstack-review.lock.yml
+            .github/aw/actions-lock.json
+            compiled-report.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 2

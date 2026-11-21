@@ -15,6 +15,9 @@ permissions:
   actions: read
   copilot-requests: none
 engine: copilot
+# Embed the reviewed author prompt in the compiled lock: cross-repo callers
+# cannot resolve factory/.github files from the caller's empty activation workspace.
+inlined-imports: true
 timeout-minutes: 10
 max-turns: 20
 tools:
