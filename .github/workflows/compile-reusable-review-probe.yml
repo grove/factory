@@ -59,60 +59,12 @@ jobs:
           assert 'GH_AW_PROMPT_CONTENT_0004' in lock
           assert 'Perform the bounded' in lock
           for part in [
-              'repository: 
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: review-compile-probe
-          path: |
-            .github/workflows/sfstack-review.lock.yml
-            .github/aw/actions-lock.json
-            compiled-report.json
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 2
- + '{{ job.workflow_repository }}',
-              'ref: 
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: review-compile-probe
-          path: |
-            .github/workflows/sfstack-review.lock.yml
-            .github/aw/actions-lock.json
-            compiled-report.json
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 2
- + '{{ job.workflow_sha }}',
-              'ref: 
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: review-compile-probe
-          path: |
-            .github/workflows/sfstack-review.lock.yml
-            .github/aw/actions-lock.json
-            compiled-report.json
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 2
- + '{{ inputs.head-sha }}',
+              'repository: $' + '{{ job.workflow_repository }}',
+              'ref: $' + '{{ job.workflow_sha }}',
+              'ref: $' + '{{ inputs.head-sha }}',
           ]:
               assert part in lock, part
-          assert 'ref: 
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: review-compile-probe
-          path: |
-            .github/workflows/sfstack-review.lock.yml
-            .github/aw/actions-lock.json
-            compiled-report.json
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 2
- + '{{ github.workflow_sha }}' not in lock
+          assert 'ref: $' + '{{ github.workflow_sha }}' not in lock
           print('Self-contained prompt and callee-bound agent controller verified.')
           PY
       - name: Commit only generated lock files to the isolated fix branch
