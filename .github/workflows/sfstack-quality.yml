@@ -2,7 +2,32 @@ name: sfstack GitHub quality
 
 # The metadata-only event coordinator dispatches this trusted controller.
 # Manual dispatch remains available from the current default branch.
+# Cross-repository reuse must run from the caller's default branch with an
+# immutable factory workflow pin and the exact caller workflow filename.
 on:
+  workflow_call:
+    # The caller is a trusted, default-branch, manually dispatched workflow.
+    # PR head and publication identity always come from the caller repository.
+    inputs:
+      pr-number:
+        description: Pull request number in the caller repository
+        required: true
+        type: number
+      expected-head:
+        description: Optional pinned PR head
+        required: false
+        type: string
+      expected-base:
+        description: Optional pinned default-branch base
+        required: false
+        type: string
+      request-id:
+        description: Reserved for the same-repository trusted coordinator
+        required: false
+        type: string
+    secrets:
+      COPILOT_GITHUB_TOKEN:
+        required: true
   workflow_dispatch:
     inputs:
       pr-number:
@@ -63,7 +88,8 @@ jobs:
           exit 1
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.workflow_sha }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: controller
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -102,7 +128,8 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.workflow_sha }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: controller
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -142,7 +169,8 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.workflow_sha }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: controller
           persist-credentials: false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -176,7 +204,7 @@ jobs:
   review:
     name: Review through Agentic Workflows
     needs: [prepare, verify]
-    uses: ./.github/workflows/sfstack-review.lock.yml
+    uses: $/.github/workflows/sfstack-review.lock.yml
     with:
       head-sha: ${{ needs.prepare.outputs.head-sha }}
     secrets:
@@ -192,7 +220,8 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.workflow_sha }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: controller
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -269,7 +298,8 @@ jobs:
           exit 1
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.workflow_sha }}
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: controller
           persist-credentials: false
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
