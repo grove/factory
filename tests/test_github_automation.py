@@ -500,7 +500,7 @@ class GitHubAutomationTests(unittest.TestCase):
     def test_dispatch_failure_leaves_a_failed_check(self):
         coordinator, _, event = self.signal()
         self.api.fail_dispatch = True
-        with self.assertRaisesRegex(ValueError, "Dispatch unavailable"):
+        with self.assertRaisesRegex(ValueError, "response uncertain"):
             coordinator.dispatch(event)
         check = next(iter(self.api.checks.values()))
         self.assertEqual("completed", check["status"])
