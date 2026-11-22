@@ -282,7 +282,13 @@ class Host:
                            or check.get("external_id") != first.get("external_id")
                            or check.get("status") != first["status"]
                            or check.get("conclusion") != first["conclusion"]
-                           or check.get("output") != first["output"]
+                           or not isinstance(check.get("output"), dict)
+                           # annotations_url embeds the check ID; it differs
+                           # even for an otherwise byte-for-byte copied result.
+                           or {key: value for key, value in check["output"].items()
+                               if key != "annotations_url"}
+                           != {key: value for key, value in first["output"].items()
+                               if key != "annotations_url"}
                            or (check.get("check_suite") or {}).get("id")
                            != (first.get("check_suite") or {}).get("id")
                            for check in copies[1:])):
