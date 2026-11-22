@@ -11,8 +11,8 @@ LOCK = ROOT / ".github/workflows/sfstack-build.lock.yml"
 
 def jobs(source):
     return dict(re.findall(
-        r"(?ms)^  ([a-z_]+):\\n(.*?)(?=^  [a-z_]+:\\n|\\Z)",
-        source.split("\\njobs:\\n", 1)[1],
+        r"(?ms)^  ([a-z_]+):\n(.*?)(?=^  [a-z_]+:\n|\Z)",
+        source.split("\njobs:\n", 1)[1],
     ))
 
 
