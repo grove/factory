@@ -940,6 +940,8 @@ def main(argv=None):
     publication = commands.add_parser("publish")
     for name in ("bundle", "result", "out"):
         publication.add_argument("--" + name, required=True)
+    publication.add_argument("--repo", default=str(ROOT),
+                             help="Verified caller repository base checkout; legacy local calls default to Factory")
     args = parser.parse_args(argv)
     try:
         if args.command in {"prepare", "publish"}:
@@ -955,7 +957,7 @@ def main(argv=None):
         elif args.command == "verify":
             result = verify(args.repo, args.bundle, args.submission, args.agent_result, args.out)
         else:
-            result = host.publish(args.bundle, args.result, ROOT)
+            result = host.publish(args.bundle, args.result, args.repo)
             write_json(args.out, result)
         if os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a") as output:

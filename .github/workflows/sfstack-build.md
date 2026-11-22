@@ -14,6 +14,9 @@ permissions:
   actions: read
   copilot-requests: none
 engine: copilot
+# Embed reviewed Markdown in the compiled lock. Reusable workflow callers do
+# not have Factory's author prompt in their workspace.
+inlined-imports: true
 timeout-minutes: 15
 max-turns: 30
 tools:
@@ -55,7 +58,8 @@ safe-outputs:
       steps:
         - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
           with:
-            ref: ${{ github.workflow_sha }}
+            repository: ${{ job.workflow_repository }}
+            ref: ${{ job.workflow_sha }}
             path: controller
             persist-credentials: false
         - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
@@ -74,7 +78,8 @@ safe-outputs:
 steps:
   - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
     with:
-      ref: ${{ github.workflow_sha }}
+      repository: ${{ job.workflow_repository }}
+      ref: ${{ job.workflow_sha }}
       path: controller
       persist-credentials: false
   - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262

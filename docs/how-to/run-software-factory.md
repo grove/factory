@@ -626,3 +626,29 @@ are documented above; none completed automatic draft publication, though the
 fifth produced a verified candidate later recovered by a maintainer. Local
 regression tests and compiler validation alone do not establish general
 Copilot success or end-to-end GitHub publication reliability.
+
+## Reusable caller-scoped Software Factory deployment
+
+A target repository may install a thin manual Actions caller that pins
+`grove/factory/.github/workflows/sfstack-software.yml` at an immutable
+reviewed Factory commit. This replaces copying the host Python controller.
+The caller owns the issue and GitHub workflow-run identity, token, draft PR,
+Quality dispatch and merge rules. It must select the repository's own
+default branch and cannot allow an issue or PR to supply a controller ref.
+
+Factory's reusable job checks out **two different sources** where needed:
+the exact **callee Factory** source for trusted code and pinned contracts,
+and the **caller repository** base for allowed-file admission, agent
+candidate edits and independently executed verification. The privileged
+publisher has a separate read-only caller checkout to prove candidate
+Git object identities without executing submitted code. The Builder's
+gh-aw Markdown is compiled **inline**, not loaded at runtime from the
+caller workspace; the nested build self-reference uses `$/`.
+
+Keep `COPILOT_GITHUB_TOKEN` inside the caller repository Actions secret,
+allow Actions to create draft pull requests, configure a trusted
+project-specific `checks.json` profile before generalizing beyond Python,
+and retain one independent review approval plus current required CI and
+`sfstack quality`. No Software Factory result grants approval or merge
+authority. The first live cross-repository Software acceptance is **not**
+established by strict compilation or isolated fixture tests.
