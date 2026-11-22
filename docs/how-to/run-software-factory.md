@@ -626,3 +626,32 @@ are documented above; none completed automatic draft publication, though the
 fifth produced a verified candidate later recovered by a maintainer. Local
 regression tests and compiler validation alone do not establish general
 Copilot success or end-to-end GitHub publication reliability.
+
+## Controlled loss-of-response and interrupted-run acceptance
+
+The trusted migrated **SoftwareHost.publish** and **Quality Host.dispatch**
+are exercised by `evals/run_recovery_fault_injection.py` against a
+deterministic GitHub API fault adapter. This has no actual GitHub mutation
+credential, no model token and no Copilot invocation. The tests prepare
+bounded work against a real **temporary Git repository**, independently
+verify actual candidate behavior, then inject loss of the API response
+**after** synthetic branch/PR/check/dispatch creation, or before a
+corresponding run is visible.
+
+The workflow's `Controlled publisher / dispatch recovery (no network or AI)`
+job retains `recovery-fault-injection/fault-injection-report.json` and a
+full test log as CI artifacts. Required cases include exact SHA and
+run/attempt ownership, unchanged draft PR reconciliation, preservation of
+human-edited PR state, detection of duplicate or wrong-provenance Quality
+runs, interrupted-run reconciliation and stale-head/base fencing. An
+in-flight Quality run can be adopted without another dispatch POST.
+If a recovered run has completed without a validated check, it **fails
+closed**; if no run is visible, no automatic retry can infer acceptance
+from a missing HTTP response.
+
+**Evidence boundary:** This is controlled production-host fault injection
+against an in-memory API, not injection into the real GitHub service or
+a claim of live crash/restart recovery. Passing tests are not a license
+to merge and do not grant human-review authority. Observe a real
+downstream lifecycle event separately before considering end-to-end
+fault tolerance fully accepted.

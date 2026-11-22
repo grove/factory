@@ -1028,6 +1028,78 @@ class GitHubSoftwarePublicationTests(SoftwareFixture):
         self.assertEqual(candidate["head_sha"], repeated["candidate_sha"])
         self.assertEqual(1, sum(path.endswith("/dispatches") for _, path, _ in self.api.mutations))
 
+    def test_quality_run_after_lost_dispatch_reply_is_reused_in_all_lifecycle_states(self):
+        for status, conclusion in (("queued", None), ("in_progress", None),
+                                   ("completed", "success"), ("completed", "failure")):
+            with self.subTest(status=status, conclusion=conclusion):
+                self.prepared_host()
+                self.api.lose_dispatch_response = True
+                first = self.publish()
+                self.assertTrue(first["recovery"]["recovered_quality_dispatch"])
+                run = self.api.quality_runs[first["quality_run_id"]]
+                run.update({"status": status, "conclusion": conclusion})
+                before = len(self.remote_reference_mutations())
+                repeated = self.publish()
+                self.assertTrue(repeated["quality_reconciled"])
+                self.assertTrue(repeated["quality_requested"])
+                # Controller success is not equivalent to the required host
+                # quality check; this publisher has no merge authority.
+                self.assertFalse(repeated["quality_passed"])
+                self.assertFalse(repeated["merge_authorized"])
+                self.assertEqual(before, len(self.remote_reference_mutations()))
+                self.assertEqual(1, sum(path.endswith("/dispatches")
+                                        for _, path, _ in self.api.mutations))
+
+    def test_late_quality_run_visibility_recovers_reserved_uncertain_dispatch_without_repost(self):
+        for status, conclusion in (("in_progress", None), ("completed", "failure")):
+            with self.subTest(status=status):
+                self.prepared_host()
+                self.api.fail_dispatch = True
+                with self.assertRaisesRegex(ValueError, "dispatch response uncertain"):
+                    self.publish()
+                self.api.fail_dispatch = False
+                self.api.quality_runs[2001] = {
+                    "id": 2001, "run_attempt": 1,
+                    "workflow_id": self.api.quality_workflow["id"],
+                    "path": self.api.quality_workflow["path"],
+                    "event": "workflow_dispatch",
+                    "repository": deepcopy(self.api.repository),
+                    "head_repository": deepcopy(self.api.repository),
+                    "head_branch": "main", "head_sha": self.base,
+                    "status": status, "conclusion": conclusion,
+                    "display_title": "sfstack quality / PR #21 / request 1234-1",
+                }
+                before = len(self.remote_reference_mutations())
+                recovered = self.publish()
+                self.assertTrue(recovered["quality_reconciled"])
+                self.assertFalse(recovered["quality_passed"])
+                self.assertEqual(2001, recovered["quality_run_id"])
+                self.assertEqual(before, len(self.remote_reference_mutations()))
+
+    def test_lost_pr_response_then_human_edits_cannot_be_overwritten_on_retry(self):
+        for changed in ("draft", "title", "body", "head"):
+            with self.subTest(changed=changed):
+                self.prepared_host()
+                self.api.lose_pull_response = True
+                first = self.publish()
+                self.assertEqual(21, first["pull_request"])
+                self.assertTrue(first["recovery"]["recovered_pr_response"])
+                draft = self.api.pulls[0]
+                if changed == "draft":
+                    draft["draft"] = False
+                elif changed == "title":
+                    draft["title"] = "Human edited PR title"
+                elif changed == "body":
+                    draft["body"] = "Human edited the acceptance criteria"
+                else:
+                    draft["head"]["sha"] = "f" * 40
+                before = len(self.remote_reference_mutations())
+                with self.assertRaises(ValueError):
+                    self.publish()
+                self.assertEqual(before, len(self.remote_reference_mutations()))
+                self.assertEqual(1, len(self.api.refs))
+                self.assertEqual(1, len(self.api.pulls))
+
     def test_quality_controller_handoff_preserves_reserved_check_generation(self):
         self.prepared_host()
         published = self.publish()
