@@ -421,6 +421,8 @@ class GitHubAutomationTests(unittest.TestCase):
         current, event = self.passing_auto_check()
         self.api.checks[999] = {**deepcopy(current), "id": 999}
         self.api.pulls[1]["title"] = "Updated acceptance criteria"
+        earlier_dispatches = sum(method == "POST" and path.endswith("/dispatches")
+                                 for method, path, _ in self.api.mutations)
         coordinator = self.new_host(202, EVENTS, "workflow_run")
         self.assertEqual([1], coordinator.dispatch(event)["dispatched"])
         self.assertEqual("failure", current["conclusion"])
@@ -428,8 +430,9 @@ class GitHubAutomationTests(unittest.TestCase):
         latest = coordinator.find_check(self.api.pulls[1])
         self.assertEqual("queued", latest["status"])
         self.assertEqual(2, check_owner(latest)["g"])
-        self.assertEqual(1, sum(method == "POST" and path.endswith("/dispatches")
-                                for method, path, _ in self.api.mutations))
+        self.assertEqual(earlier_dispatches + 1,
+                         sum(method == "POST" and path.endswith("/dispatches")
+                             for method, path, _ in self.api.mutations))
 
     def test_base_push_retires_both_duplicate_successes_without_ai_dispatch(self):
         publication = self.start()
