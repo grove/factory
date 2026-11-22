@@ -247,21 +247,52 @@ class Host:
         selected["base"]["sha"] = branch_tip
         return selected
 
-    def find_check(self, pr):
+    def owned_checks(self, pr):
         checks = self.pages("commits/" + pr["head"]["sha"] + "/check-runs?"
                             + urlencode({"check_name": CHECK_NAME, "filter": "all"}), "check_runs")
-        matches = [check for check in checks
-                   if (check_owner(check) or {}).get("p") == pr["number"]
-                   and check.get("head_sha") == pr["head"]["sha"]]
+        return [check for check in checks
+                if (check_owner(check) or {}).get("p") == pr["number"]
+                and check.get("head_sha") == pr["head"]["sha"]]
+
+    @staticmethod
+    def select_check(matches):
         if not matches:
             return None
-        # GitHub's `latest` filter uses completed_at, not our assessment order.
-        # Keep historical checks and select the explicit host-owned generation.
-        # Existing v2 checks precede the first v3 generation.
-        generations = [check_owner(check).get("g", 0) for check in matches]
-        if len(generations) != len(set(generations)):
-            raise ValueError("Multiple owned checks claim one generation; refusing an ambiguous update.")
-        return max(matches, key=lambda check: check_owner(check).get("g", 0))
+        # A draft -> ready transition can duplicate a completed check. Only
+        # identical, final, intent-bound outcomes from ONE run may be reused.
+        # Conflicting or pending copies still fail closed.
+        groups = {}
+        for check in matches:
+            groups.setdefault(check_owner(check).get("g", 0), []).append(check)
+        newest = max(groups)
+        for generation, copies in groups.items():
+            if len(copies) == 1:
+                continue
+            first = copies[0]
+            identity = check_owner(first)
+            if (identity.get("v") != 3 or identity["k"] != "run" or "t" not in identity
+                    or first.get("status") != "completed"
+                    or first.get("conclusion") not in {"success", "failure"}
+                    or (generation < newest and first["conclusion"] == "success")
+                    or not isinstance(first.get("output"), dict)
+                    or not first["output"].get("summary") or not first["output"].get("title")
+                    or not all(positive(check.get("id")) for check in copies)
+                    or len({check["id"] for check in copies}) != len(copies)
+                    or any(check_owner(check) != identity
+                           or check.get("external_id") != first.get("external_id")
+                           or check.get("status") != first["status"]
+                           or check.get("conclusion") != first["conclusion"]
+                           or check.get("output") != first["output"]
+                           or (check.get("check_suite") or {}).get("id")
+                           != (first.get("check_suite") or {}).get("id")
+                           for check in copies[1:])):
+                raise ValueError("Multiple owned checks claim one generation; refusing an ambiguous update.")
+        # GitHub's `latest` filter uses completed_at, not assessment order.
+        # Choose the original (oldest ID) among identical outcome copies.
+        return min(groups[newest], key=lambda check: check["id"])
+
+    def find_check(self, pr):
+        return self.select_check(self.owned_checks(pr))
 
     def update_check(self, pr, check, identity, status, title, summary, conclusion=None, details_url=None):
         body = {"name": CHECK_NAME, "external_id": owner_text(identity), "status": status,
@@ -290,10 +321,19 @@ class Host:
         fenced by generation and never update this historical completion again.
         """
         if previous is not None:
-            self.update_check(pr, previous, check_owner(previous), "completed", "Quality assessment superseded",
-                              "A newer assessment requires fresh evidence. This result no longer grants quality clearance.\n\n"
-                              + previous.get("output", {}).get("summary", "")[:60000], "failure",
-                              previous.get("details_url"))
+            # A copied success must NEVER survive a base invalidation or newer
+            # assessment. Retire every matching record before creating a new one.
+            matches = self.owned_checks(pr)
+            current = self.select_check(matches)
+            old_owner = check_owner(previous)
+            if current is None or current["id"] != previous["id"] or check_owner(current) != old_owner:
+                raise ValueError("Quality check ownership changed before supersession.")
+            copies = [check for check in matches if check_owner(check) == old_owner]
+            for check in sorted(copies, key=lambda item: item["id"], reverse=True):
+                self.update_check(pr, check, old_owner, "completed", "Quality assessment superseded",
+                                  "A newer assessment requires fresh evidence. This result no longer grants quality clearance.\n\n"
+                                  + check.get("output", {}).get("summary", "")[:60000], "failure",
+                                  check.get("details_url"))
         return self.update_check(pr, None, identity, status, title, summary, conclusion, details_url)
 
     def invalidate(self, event):
