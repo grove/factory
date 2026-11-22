@@ -223,7 +223,8 @@ Factory source), while the *candidate* is checked out from
 `github.repository` at the authenticated caller default-branch
 `github.workflow_sha`. The nested gh-aw builder uses the Factory-bound
 `$/` self-reference and its reviewed Markdown prompt is **inlined** in the
-compiled lock file. The verifier executes the candidate in a fresh job with
+compiled lock file.
+GitHub [documents the `$/` self-repository syntax](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows) for nested reusable calls; it resolves to the called Factory workflow's own repository and commit, not the outer caller's workspace. The same mechanism passed the [live cross-repository Quality assessment](https://github.com/grove/sfstack/actions/runs/44925384278). The Software path itself still needs its own non-agent graph probe and later live acceptance. The verifier executes the candidate in a fresh job with
 no write privileges. Only the final publisher has scoped
 `contents/pull-requests/actions/checks: write`, and it reconstructs Git
 objects from a separate **read-only caller candidate checkout**, never
@@ -233,8 +234,9 @@ request a fresh exact-head Quality assessment but may not approve or merge.
 Before a first live invocation, the target repository owner must configure
 `COPILOT_GITHUB_TOKEN`, allow GitHub Actions to create pull requests,
 and review project-specific verification/test commands and allowed file scope.
-Keep the target's existing protected `main` checks and independent human
-approval requirements. Do not dispatch against a hostile codebase on an
+Keep the target's existing protected `main`, required CI and Quality checks,
+and its **solo-maintainer** merge rule (zero external approvals). The owner
+must still inspect the draft and evidence before voluntarily merging. Do not dispatch against a hostile codebase on an
 ordinary runner or treat a schema-valid builder response as a completed
 publication.
 

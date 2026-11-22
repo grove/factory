@@ -75,6 +75,19 @@ class ReusableSoftwareBoundaryTests(unittest.TestCase):
         self.assertIn("ref: $" + "{{ job.workflow_sha }}", compiled)
         self.assertNotIn("ref: $" + "{{ github.workflow_sha }}", compiled)
 
+    def test_nested_dollar_self_reference_matches_proven_quality_reuse(self):
+        # GitHub.com documents $/ for nested reusable workflows, resolved to
+        # the repository and immutable commit containing the reference:
+        # https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows
+        # Factory's nested Quality review used $/ successfully in the real
+        # sfstack cross-repository run 44925384278; this is analogous syntax
+        # evidence, not proof of a complete Software issue-to-draft run.
+        source = SOFTWARE.read_text(encoding="utf-8")
+        quality = (ROOT / ".github/workflows/sfstack-quality.yml").read_text(encoding="utf-8")
+        self.assertIn("uses: $/.github/workflows/sfstack-build.lock.yml", source)
+        self.assertIn("uses: $/.github/workflows/sfstack-review.lock.yml", quality)
+        self.assertNotIn("uses: ./.github/workflows/sfstack-build.lock.yml", source)
+
     def test_publish_cli_explicit_candidate_path_not_trusted_controller(self):
         source = (ROOT / "integrations/github/software.py").read_text(encoding="utf-8")
         self.assertIn('publication.add_argument("--repo", default=str(ROOT)', source)

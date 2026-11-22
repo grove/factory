@@ -627,6 +627,35 @@ fifth produced a verified candidate later recovered by a maintainer. Local
 regression tests and compiler validation alone do not establish general
 Copilot success or end-to-end GitHub publication reliability.
 
+## Controlled loss-of-response and interrupted-run acceptance
+
+The trusted migrated **SoftwareHost.publish** and **Quality Host.dispatch**
+are exercised by `evals/run_recovery_fault_injection.py` against a
+deterministic GitHub API fault adapter. This has no actual GitHub mutation
+credential, no model token and no Copilot invocation. The tests prepare
+bounded work against a real **temporary Git repository**, independently
+verify actual candidate behavior, then inject loss of the API response
+**after** synthetic branch/PR/check/dispatch creation, or before a
+corresponding run is visible.
+
+The workflow's `Controlled publisher / dispatch recovery (no network or AI)`
+job retains `recovery-fault-injection/fault-injection-report.json` and a
+full test log as CI artifacts. Required cases include exact SHA and
+run/attempt ownership, unchanged draft PR reconciliation, preservation of
+human-edited PR state, detection of duplicate or wrong-provenance Quality
+runs, interrupted-run reconciliation and stale-head/base fencing. An
+in-flight Quality run can be adopted without another dispatch POST.
+If a recovered run has completed without a validated check, it **fails
+closed**; if no run is visible, no automatic retry can infer acceptance
+from a missing HTTP response.
+
+**Evidence boundary:** This is controlled production-host fault injection
+against an in-memory API, not injection into the real GitHub service or
+a claim of live crash/restart recovery. Passing tests are not a license
+to merge and do not grant human-review authority. Observe a real
+downstream lifecycle event separately before considering end-to-end
+fault tolerance fully accepted.
+
 ## Reusable caller-scoped Software Factory deployment
 
 A target repository may install a thin manual Actions caller that pins
@@ -648,7 +677,26 @@ caller workspace; the nested build self-reference uses `$/`.
 Keep `COPILOT_GITHUB_TOKEN` inside the caller repository Actions secret,
 allow Actions to create draft pull requests, configure a trusted
 project-specific `checks.json` profile before generalizing beyond Python,
-and retain one independent review approval plus current required CI and
-`sfstack quality`. No Software Factory result grants approval or merge
+and retain current required CI and
+`sfstack quality` with the solo-maintainer branch rule (zero external
+approvals). Inspect the assessment evidence before merging. No Software Factory result grants approval or merge
 authority. The first live cross-repository Software acceptance is **not**
 established by strict compilation or isolated fixture tests.
+
+### Nested reusable workflow syntax evidence
+
+The `uses: $/.github/workflows/sfstack-build.lock.yml` reference is
+the documented **GitHub.com self-repository syntax** for a nested reusable
+workflow. GitHub resolves it to the repository and **exact commit of the
+workflow containing the reference**, not the outer caller's workspace.
+See the [official reusable-workflow documentation](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows)
+and [July 30, 2026 feature announcement](https://github.blog/changelog/2026-07-30-reference-same-repository-actions-with-self-repository-syntax/).
+
+Factory already uses the same `$/` pattern in
+`sfstack-quality.yml` to call `sfstack-review.lock.yml`. The
+[successful automatic cross-repository Quality run](https://github.com/grove/sfstack/actions/runs/44925384278)
+materialized and ran that nested reviewed Factory workflow with all
+13 jobs succeeding. This is real evidence the syntax is supported here,
+not a claim that the Software builder has itself been run live.
+A credential-free, non-default-branch resolution probe can additionally
+check the new Software call graph before any paid issue build.
