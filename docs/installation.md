@@ -205,3 +205,44 @@ not an isolation boundary suitable for hostile PR code.
 The same-repository Factory self-hosted path continues to operate independently.
 This is a reusable **event-processing workflow**, not a central GitHub App or
 server with cross-repository credentials.
+
+## Reusable Software Factory for a trusted target repository
+
+The bounded Software Factory workflow can be called by a **thin**
+`.github/workflows/sfstack-software.yml` in the target repository, with a
+**full, reviewed Factory commit SHA** (never a mutable branch), just as for
+Quality. The operator dispatches the caller from its **default branch** and
+selects an open issue, 1–8 exact allowed paths, explicit acceptance criteria,
+and `change` or `defect` mode. There are **no automatic issue triggers**;
+issue text cannot choose additional files or widen repository permissions.
+
+Factory's `sfstack-software.yml` provides both `workflow_dispatch` for
+same-repository use and `workflow_call` for reuse. The controller checkouts
+use `job.workflow_repository` and `job.workflow_sha` (the reviewed
+Factory source), while the *candidate* is checked out from
+`github.repository` at the authenticated caller default-branch
+`github.workflow_sha`. The nested gh-aw builder uses the Factory-bound
+`$/` self-reference and its reviewed Markdown prompt is **inlined** in the
+compiled lock file.
+GitHub [documents the `$/` self-repository syntax](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows) for nested reusable calls; it resolves to the called Factory workflow's own repository and commit, not the outer caller's workspace. The same mechanism passed the [live cross-repository Quality assessment](https://github.com/grove/sfstack/actions/runs/44925384278). The Software path itself still needs its own non-agent graph probe and later live acceptance. The verifier executes the candidate in a fresh job with
+no write privileges. Only the final publisher has scoped
+`contents/pull-requests/actions/checks: write`, and it reconstructs Git
+objects from a separate **read-only caller candidate checkout**, never
+from Factory's unrelated source tree. It may create a **draft PR** and
+request a fresh exact-head Quality assessment but may not approve or merge.
+
+Before a first live invocation, the target repository owner must configure
+`COPILOT_GITHUB_TOKEN`, allow GitHub Actions to create pull requests,
+and review project-specific verification/test commands and allowed file scope.
+Keep the target's existing protected `main`, required CI and Quality checks,
+and its **solo-maintainer** merge rule (zero external approvals). The owner
+must still inspect the draft and evidence before voluntarily merging. Do not dispatch against a hostile codebase on an
+ordinary runner or treat a schema-valid builder response as a completed
+publication.
+
+**Acceptance remains separate:** A strict compiler pass and host fixture tests
+do not prove actual cross-repository issue admission, agent proposal, draft
+publication, or Quality dispatch. Run a bounded, harmless issue on the
+caller after the Factory SHA and target caller have been reviewed and merged.
+Retain the build and verification artifacts, exact candidate SHA, created
+draft, Quality check and human inspection in Factory acceptance issue #1.

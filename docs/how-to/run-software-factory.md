@@ -655,3 +655,48 @@ a claim of live crash/restart recovery. Passing tests are not a license
 to merge and do not grant human-review authority. Observe a real
 downstream lifecycle event separately before considering end-to-end
 fault tolerance fully accepted.
+
+## Reusable caller-scoped Software Factory deployment
+
+A target repository may install a thin manual Actions caller that pins
+`grove/factory/.github/workflows/sfstack-software.yml` at an immutable
+reviewed Factory commit. This replaces copying the host Python controller.
+The caller owns the issue and GitHub workflow-run identity, token, draft PR,
+Quality dispatch and merge rules. It must select the repository's own
+default branch and cannot allow an issue or PR to supply a controller ref.
+
+Factory's reusable job checks out **two different sources** where needed:
+the exact **callee Factory** source for trusted code and pinned contracts,
+and the **caller repository** base for allowed-file admission, agent
+candidate edits and independently executed verification. The privileged
+publisher has a separate read-only caller checkout to prove candidate
+Git object identities without executing submitted code. The Builder's
+gh-aw Markdown is compiled **inline**, not loaded at runtime from the
+caller workspace; the nested build self-reference uses `$/`.
+
+Keep `COPILOT_GITHUB_TOKEN` inside the caller repository Actions secret,
+allow Actions to create draft pull requests, configure a trusted
+project-specific `checks.json` profile before generalizing beyond Python,
+and retain current required CI and
+`sfstack quality` with the solo-maintainer branch rule (zero external
+approvals). Inspect the assessment evidence before merging. No Software Factory result grants approval or merge
+authority. The first live cross-repository Software acceptance is **not**
+established by strict compilation or isolated fixture tests.
+
+### Nested reusable workflow syntax evidence
+
+The `uses: $/.github/workflows/sfstack-build.lock.yml` reference is
+the documented **GitHub.com self-repository syntax** for a nested reusable
+workflow. GitHub resolves it to the repository and **exact commit of the
+workflow containing the reference**, not the outer caller's workspace.
+See the [official reusable-workflow documentation](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows)
+and [July 30, 2026 feature announcement](https://github.blog/changelog/2026-07-30-reference-same-repository-actions-with-self-repository-syntax/).
+
+Factory already uses the same `$/` pattern in
+`sfstack-quality.yml` to call `sfstack-review.lock.yml`. The
+[successful automatic cross-repository Quality run](https://github.com/grove/sfstack/actions/runs/44925384278)
+materialized and ran that nested reviewed Factory workflow with all
+13 jobs succeeding. This is real evidence the syntax is supported here,
+not a claim that the Software builder has itself been run live.
+A credential-free, non-default-branch resolution probe can additionally
+check the new Software call graph before any paid issue build.
