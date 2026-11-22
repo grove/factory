@@ -357,6 +357,85 @@ class GitHubAutomationTests(unittest.TestCase):
             self.host.start(1)
         self.assertEqual(writes, len(self.api.mutations))
 
+    def test_identical_completed_checks_from_ready_transition_do_not_repeat_paid_review(self):
+        current, event = self.passing_auto_check()
+        self.api.checks[999] = {**deepcopy(current), "id": 999}
+        coordinator = self.new_host(202, EVENTS, "workflow_run")
+        writes = len(self.api.mutations)
+        self.assertEqual([], coordinator.dispatch(event)["dispatched"])
+        self.assertEqual(writes, len(self.api.mutations))
+        self.assertEqual(current["id"], coordinator.find_check(self.api.pulls[1])["id"])
+        self.assertEqual("success", self.api.checks[999]["conclusion"])
+
+        # A completion event for the already-published run is read-only too.
+        controller = self.api.runs[201]
+        controller.update({"status": "completed", "conclusion": "success"})
+        result = coordinator.reconcile({"action": "completed", "workflow_run": deepcopy(controller)})
+        self.assertFalse(result["published"])
+        self.assertEqual(writes, len(self.api.mutations))
+
+    def test_conflicting_duplicate_checks_fail_closed_without_dispatch(self):
+        for variant in ("different-owner", "different-result", "pending",
+                        "different-output", "different-suite", "missing-intent"):
+            with self.subTest(variant=variant):
+                self.api = FakeGitHub()
+                current, event = self.passing_auto_check()
+                copy = {**deepcopy(current), "id": 999}
+                if variant == "different-owner":
+                    identity = check_owner(copy)
+                    identity["i"] = 999
+                    copy["external_id"] = owner_text(identity)
+                elif variant == "different-result":
+                    copy["conclusion"] = "failure"
+                elif variant == "pending":
+                    copy["status"], copy["conclusion"] = "in_progress", None
+                elif variant == "different-output":
+                    copy["output"]["summary"] = "This is not the pinned result."
+                elif variant == "different-suite":
+                    current["check_suite"] = {"id": 12}
+                    copy["check_suite"] = {"id": 13}
+                else:
+                    identity = check_owner(copy)
+                    identity.pop("t")
+                    copy["external_id"] = owner_text(identity)
+                self.api.checks[999] = copy
+                coordinator = self.new_host(202, EVENTS, "workflow_run")
+                writes = len(self.api.mutations)
+                with self.assertRaisesRegex(ValueError, "Multiple owned checks"):
+                    coordinator.dispatch(event)
+                self.assertEqual(writes, len(self.api.mutations))
+
+    def test_changed_intent_retires_all_duplicate_successes_before_new_dispatch(self):
+        current, event = self.passing_auto_check()
+        self.api.checks[999] = {**deepcopy(current), "id": 999}
+        self.api.pulls[1]["title"] = "Updated acceptance criteria"
+        coordinator = self.new_host(202, EVENTS, "workflow_run")
+        self.assertEqual([1], coordinator.dispatch(event)["dispatched"])
+        self.assertEqual("failure", current["conclusion"])
+        self.assertEqual("failure", self.api.checks[999]["conclusion"])
+        latest = coordinator.find_check(self.api.pulls[1])
+        self.assertEqual("queued", latest["status"])
+        self.assertEqual(2, check_owner(latest)["g"])
+        self.assertEqual(1, sum(method == "POST" and path.endswith("/dispatches")
+                                for method, path, _ in self.api.mutations))
+
+    def test_base_push_retires_both_duplicate_successes_without_ai_dispatch(self):
+        publication = self.start()
+        original = self.check(publication)
+        original.update({"status": "completed", "conclusion": "success"})
+        self.api.checks[999] = {**deepcopy(original), "id": 999}
+        self.api.tip = "c" * 40
+        coordinator = self.new_host(200, EVENTS, "push", head=self.api.tip)
+        self.assertEqual([1], coordinator.invalidate({
+            "ref": "refs/heads/main", "after": self.api.tip})["invalidated"])
+        self.assertEqual("failure", original["conclusion"])
+        self.assertEqual("failure", self.api.checks[999]["conclusion"])
+        latest = coordinator.find_check(self.api.pulls[1])
+        self.assertEqual("stale", check_owner(latest)["k"])
+        self.assertEqual("failure", latest["conclusion"])
+        self.assertEqual(2, check_owner(latest)["g"])
+        self.assertFalse(any(path.endswith("/dispatches") for _, path, _ in self.api.mutations))
+
     def signal(self):
         coordinator = self.new_host(200, EVENTS, "workflow_run")
         signal = self.api.add_run(90, SIGNAL, "pull_request", status="completed", head=HEAD)
