@@ -359,7 +359,16 @@ class GitHubAutomationTests(unittest.TestCase):
 
     def test_identical_completed_checks_from_ready_transition_do_not_repeat_paid_review(self):
         current, event = self.passing_auto_check()
-        self.api.checks[999] = {**deepcopy(current), "id": 999}
+        # GitHub includes ID-specific annotations URLs and details URLs in
+        # otherwise identical results (observed live on sfstack PR #45).
+        current["check_suite"] = {"id": 123}
+        current["details_url"] = "https://github.com/fixture/inventory/runs/" + str(current["id"])
+        current["output"]["annotations_count"] = 0
+        current["output"]["annotations_url"] = current["details_url"] + "/annotations"
+        copy = {**deepcopy(current), "id": 999}
+        copy["details_url"] = "https://github.com/fixture/inventory/runs/999"
+        copy["output"]["annotations_url"] = copy["details_url"] + "/annotations"
+        self.api.checks[999] = copy
         coordinator = self.new_host(202, EVENTS, "workflow_run")
         writes = len(self.api.mutations)
         self.assertEqual([], coordinator.dispatch(event)["dispatched"])
@@ -376,7 +385,8 @@ class GitHubAutomationTests(unittest.TestCase):
 
     def test_conflicting_duplicate_checks_fail_closed_without_dispatch(self):
         for variant in ("different-owner", "different-result", "pending",
-                        "different-output", "different-suite", "missing-intent"):
+                        "different-output", "different-annotations-count",
+                        "different-suite", "missing-intent"):
             with self.subTest(variant=variant):
                 self.api = FakeGitHub()
                 current, event = self.passing_auto_check()
@@ -391,6 +401,8 @@ class GitHubAutomationTests(unittest.TestCase):
                     copy["status"], copy["conclusion"] = "in_progress", None
                 elif variant == "different-output":
                     copy["output"]["summary"] = "This is not the pinned result."
+                elif variant == "different-annotations-count":
+                    copy["output"]["annotations_count"] = 1
                 elif variant == "different-suite":
                     current["check_suite"] = {"id": 12}
                     copy["check_suite"] = {"id": 13}
