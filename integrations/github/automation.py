@@ -345,6 +345,29 @@ class Host:
             invalidated.append(pr["number"])
         return {"invalidated": invalidated, "dispatched": []}
 
+    def matching_dispatch_run(self, number, request_id, branch, tip):
+        """Reconcile an uncertain 204 from the authoritative Actions API.
+
+        A lost HTTP reply may occur *after* GitHub accepted the dispatch.
+        Never repeat POST merely because the first response or new run is
+        missing. The reserved check remains nonpassing until its exact
+        controller run owns and publishes a fresh assessment.
+        """
+        title = f"sfstack quality / PR #{number} / request {request_id}"
+        runs = self.pages("actions/workflows/" + QUALITY
+                          + "/runs?event=workflow_dispatch", "workflow_runs")
+        matches = [run for run in runs if run.get("display_title") == title]
+        if len(matches) > 1:
+            raise ValueError("Multiple Quality runs claim one request; human reconciliation required.")
+        if not matches:
+            return None
+        run = matches[0]
+        self.validate_run(run, QUALITY, {"workflow_dispatch"}, branch)
+        if (not positive(run.get("id")) or not positive(run.get("run_attempt"))
+                or run.get("head_sha") != tip):
+            raise ValueError("Recovered Quality dispatch has mismatched run, branch, or base identity.")
+        return run
+
     def dispatch(self, event):
         repository, _ = self.trusted_context(EVENTS, {"workflow_run"})
         branch = repository["default_branch"]
@@ -384,7 +407,7 @@ class Host:
                 or pr["head"].get("ref") != source.get("head_branch")):
             return {"dispatched": [], "reason": "PR advanced after the signal."}
         numbers = [pr["number"]]
-        dispatched = []
+        dispatched, recovered = [], []
         request_id = f"{self.run_id}-{self.attempt}"
         for number in numbers:
             pr = self.pr(number, branch)
@@ -414,13 +437,44 @@ class Host:
                 self.api.post(self.path("actions/workflows/" + QUALITY + "/dispatches"), {
                     "ref": branch, "inputs": {"pr-number": str(number), "expected-head": pr["head"]["sha"],
                                                "expected-base": tip, "request-id": request_id}})
-            except (OSError, ValueError):
-                self.update_check(pr, check, identity, "completed", "Quality dispatch failed",
-                                  "A fresh assessment could not be started. Dispatch sfstack GitHub quality from the default branch.",
-                                  "failure")
-                raise
+            except (OSError, ValueError) as exc:
+                # A failed network response does NOT mean GitHub rejected the
+                # dispatch. Read the exact authenticated workflow/run identity
+                # before deciding whether to close the reserved check.
+                try:
+                    recovered_run = self.matching_dispatch_run(number, request_id, branch, tip)
+                except (OSError, ValueError) as lookup_exc:
+                    # Ambiguous or invalid observations must not prompt a second
+                    # POST, nor can they grant a passing check.
+                    raise ValueError("Quality dispatch response is ambiguous; "
+                                     "no automatic duplicate permitted.") from lookup_exc
+                if recovered_run is None:
+                    # No observed run is NOT proof the async request failed;
+                    # mark negative so branch protection cannot admit it.
+                    self.update_check(pr, check, identity, "completed", "Quality dispatch failed",
+                                      "A fresh assessment could not be confirmed. Do not retry the "
+                                      "dispatch blindly; inspect GitHub runs and request ownership.",
+                                      "failure")
+                    raise ValueError("Quality dispatch response uncertain; no matching run visible.") from exc
+                current = self.pr(number, branch)
+                if (current["head"]["sha"] != pr["head"]["sha"]
+                        or self.default_sha(branch) != tip
+                        or pr_intent_digest(current) != intent):
+                    raise ValueError("PR head, base, or acceptance intent changed during dispatch recovery.")
+                recovered.append(number)
+                if recovered_run.get("status") == "completed":
+                    # A completed controller without its own passing check
+                    # cannot leave the reservation pending forever. Existing
+                    # valid completed publications remain untouched.
+                    self.close_pending(
+                        recovered_run, repository,
+                        "The recovered Quality run completed without publishing "
+                        "a validated result: " + str(recovered_run.get("conclusion")) + ".")
             dispatched.append(number)
-        return {"dispatched": dispatched}
+        result = {"dispatched": dispatched}
+        if recovered:
+            result["recovered"] = recovered
+        return result
 
     def start(self, pr_number, expected_head="", expected_base="", request_id=""):
         repository, run = self.trusted_context(QUALITY, {"workflow_dispatch"})

@@ -41,6 +41,9 @@ class FakeGitHub:
         self.artifacts = []
         self.calls = []
         self.fail_dispatch = False
+        self.lose_dispatch_response = False
+        self.dispatch_run_variant = ""
+        self.dispatch_run_status = "queued"
         self.fail_check_creation = False
         self.add_run(100)
 
@@ -78,6 +81,12 @@ class FakeGitHub:
             result = self.repository
         elif suffix == "/git/ref/heads/main":
             result = {"object": {"sha": self.tip}}
+        elif suffix == "/actions/workflows/" + QUALITY + "/runs":
+            result = {"workflow_runs": [
+                run for run in self.runs.values()
+                if run["path"] == self.workflows[QUALITY]["path"]
+                and run.get("event") == "workflow_dispatch"
+            ] if page == 1 else []}
         elif suffix.startswith("/actions/workflows/"):
             result = self.workflows[suffix.rsplit("/", 1)[-1]]
         elif re.fullmatch(r"/actions/runs/[0-9]+", suffix):
@@ -110,6 +119,21 @@ class FakeGitHub:
         if path.endswith("/actions/workflows/" + QUALITY + "/dispatches"):
             if self.fail_dispatch:
                 raise ValueError("Dispatch unavailable")
+            if self.lose_dispatch_response:
+                inputs = body["inputs"]
+                title = (f"sfstack quality / PR #{inputs['pr-number']} / "
+                         f"request {inputs['request-id']}")
+                next_id = max(self.runs) + 1
+                run = self.add_run(next_id, status=self.dispatch_run_status,
+                                   head=self.tip, title=title)
+                if self.dispatch_run_variant == "wrong-base":
+                    run["head_sha"] = "f" * 40
+                if self.dispatch_run_variant == "wrong-workflow":
+                    run["workflow_id"] = self.workflows[SIGNAL]["id"]
+                if self.dispatch_run_variant == "duplicate":
+                    self.add_run(next_id + 1, status=self.dispatch_run_status,
+                                 head=self.tip, title=title)
+                raise OSError("Response lost after GitHub accepted the Quality dispatch.")
             return None
         raise AssertionError("Unexpected GitHub mutation: " + path)
 
@@ -424,6 +448,54 @@ class GitHubAutomationTests(unittest.TestCase):
                     signal["pull_requests"].append({"number": 2})
                 self.assertEqual([], coordinator.dispatch(event)["dispatched"])
                 self.assertEqual([], self.api.mutations)
+
+    def test_lost_dispatch_reply_recovers_exact_inflight_run_without_repeat_post(self):
+        for status in ("queued", "in_progress"):
+            with self.subTest(status=status):
+                self.api = FakeGitHub()
+                coordinator, _, event = self.signal()
+                self.api.lose_dispatch_response = True
+                self.api.dispatch_run_status = status
+                result = coordinator.dispatch(event)
+                self.assertEqual({"dispatched": [1], "recovered": [1]}, result)
+                self.assertEqual(1, sum(path.endswith("/dispatches")
+                                        for method, path, _ in self.api.mutations
+                                        if method == "POST"))
+                queued = coordinator.find_check(self.api.pulls[1])
+                self.assertEqual("queued", queued["status"])
+                self.assertEqual("request", check_owner(queued)["k"])
+                before = len(self.api.mutations)
+                self.assertEqual([], coordinator.dispatch(event)["dispatched"])
+                self.assertEqual(before, len(self.api.mutations))
+
+    def test_lost_dispatch_reply_reconciles_completed_run_as_failure_not_approval(self):
+        coordinator, _, event = self.signal()
+        self.api.lose_dispatch_response = True
+        self.api.dispatch_run_status = "completed"
+        result = coordinator.dispatch(event)
+        self.assertEqual([1], result["recovered"])
+        self.assertEqual(1, sum(path.endswith("/dispatches")
+                                for _, path, _ in self.api.mutations))
+        check = coordinator.find_check(self.api.pulls[1])
+        self.assertEqual("completed", check["status"])
+        self.assertEqual("failure", check["conclusion"])
+        self.assertEqual("run", check_owner(check)["k"])
+        self.assertNotEqual("success", check.get("conclusion"))
+
+    def test_lost_dispatch_reply_with_ambiguous_or_wrong_run_fails_closed(self):
+        for variant in ("duplicate", "wrong-base", "wrong-workflow"):
+            with self.subTest(variant=variant):
+                self.api = FakeGitHub()
+                coordinator, _, event = self.signal()
+                self.api.lose_dispatch_response = True
+                self.api.dispatch_run_variant = variant
+                with self.assertRaisesRegex(ValueError, "ambiguous"):
+                    coordinator.dispatch(event)
+                self.assertEqual(1, sum(path.endswith("/dispatches")
+                                        for _, path, _ in self.api.mutations))
+                check = coordinator.find_check(self.api.pulls[1])
+                self.assertNotEqual("success", check.get("conclusion"))
+                self.assertEqual("request", check_owner(check)["k"])
 
     def test_dispatch_failure_leaves_a_failed_check(self):
         coordinator, _, event = self.signal()
