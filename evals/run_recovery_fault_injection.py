@@ -61,7 +61,8 @@ def run_cases(output: Path) -> bool:
         stream.seek(0)
         stream.truncate(0)
         result = unittest.TextTestRunner(stream=stream, verbosity=2).run(suite)
-        passed = result.wasSuccessful() and result.testsRun == 1
+        passed = (result.wasSuccessful() and result.testsRun == 1
+                  and not result.skipped and not result.expectedFailures)
         entries.append({
             "scenario": label, "test": dotted, "status": "passed" if passed else "failed",
             "tests_run": result.testsRun,
