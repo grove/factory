@@ -319,6 +319,8 @@ def approve_label(api, context):
         # No planning was requested. The writer's factory:run label itself
         # authorizes this *one* paid build, not an additional paid AI plan.
         # Any orphaned AI advice/history is a conflict, not a bypass route.
+        if any(item.get("name") == PLAN_LABEL for item in issue.get("labels", [])):
+            raise ValueError("factory:plan is present without approved advice; direct run is blocked.")
         if ai_plan_records(api, repo, number):
             raise ValueError("AI planning history without a trusted scope snapshot; direct run is blocked.")
         claim = {**plan, "planning_mode": "direct",
@@ -357,7 +359,8 @@ def verify_claim(api, context, actor):
     if claims[0].get("planning_mode") == "direct":
         # Direct-mode claims cannot reclassify a failed, stale, or pending
         # factory:plan attempt as an approved unplanned build.
-        if plans or ai_plan_records(api, repo, number):
+        if (plans or ai_plan_records(api, repo, number)
+                or any(item.get("name") == PLAN_LABEL for item in issue.get("labels", []))):
             raise ValueError("Direct run cannot bypass an earlier AI planning request.")
         expected = {**plan, "planning_mode": "direct", **common}
         advisory, digest = None, None
