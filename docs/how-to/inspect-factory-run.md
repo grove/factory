@@ -17,6 +17,15 @@ does not need the Copilot credential.
     python -m integrations.github.run_summary \
       --repository grove/sfstack --run 45253589667
 
+If you already have a suitably scoped authenticated GitHub CLI credential, use a one-command environment assignment from the Factory checkout (do not print the token):
+
+```sh
+GH_TOKEN="$(gh auth token)" python -m integrations.github.run_summary \
+  --repository grove/sfstack --run 45253589667
+```
+
+The credential must also allow reads of workflow definitions. A connector that exposes only run metadata may not support the command's identity checks. Do not weaken those checks to accommodate a restricted connector.
+
 The command emits one JSON object. It recognizes the label workflow and
 its actual run ID, attempt, repository and caller base SHA. It uses
 GitHub-owned job metadata, bot-authored claim/plan records, and the exact
