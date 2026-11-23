@@ -15,7 +15,7 @@ available as an operator fallback.
 ## Once per repository
 
 1. Create two issue labels in **Settings → Issues → Labels**:
-   `factory:plan` (no-AI preview) and `factory:run` (paid implementation).
+   `factory:plan` (**paid** Copilot-assisted strategy) and `factory:run` (**paid** implementation).
    Their names are exact and case-sensitive.
 2. Ensure `sfstack-issue-label.yml` exists on the repository's **default
    branch** and references the exact reviewed Factory SHA for both the
@@ -58,10 +58,15 @@ missing scope fails closed.
 
 ## Two intentional clicks
 
-1. A repository **writer** adds `factory:plan` to an open issue.
-   A trusted, default-branch job parses the issue with no model or candidate
-   code execution. The only mutation is a bot-authored comment containing a
-   human-readable exact plan and machine-readable provenance. Review it.
+1. A repository **writer** adds `factory:plan` to an open issue, explicitly
+   authorizing **one paid Copilot planning call**. A trusted no-AI preflight
+   first pins the exact issue, base, accepted files and criteria. A separate
+   read-only model job sees limited source excerpts and proposes specific
+   implementation steps, per-criterion test methods, risks and open questions.
+   The model has no shell, write or GitHub publishing tools. A third independent
+   job validates its structured output and publishes the actual AI-assisted
+   proposal as a bot comment. Invalid output blocks; it never silently
+   reverts to repeating the issue. Review **that second comment**.
 2. When satisfied, a writer adds `factory:run` once. The label handler
    verifies the actual GitHub event, author permission, same issue title/body,
    original plan, immutable base SHA and one-run history; it writes a durable
@@ -70,7 +75,10 @@ missing scope fails closed.
    change, publish a draft PR, and request exact-head Quality.
 
 If the issue was edited, the plan no longer matches, or `main` advanced,
-remove and reapply `factory:plan` to receive a new reviewable preview.
+remove and reapply `factory:plan` only after reviewing the new paid planning
+cost. The same unchanged issue and base cannot be billed for repeated plans;
+a failed plan request cannot authorize implementation. The issue must change
+or a separate explicitly authorized follow-up must be created.
 If a run has **already been claimed**, relabeling or rerunning will not
 automatically purchase a second build. Inspect its GitHub run and retained
 artifacts, reconcile any draft/check/dispatch before a new **separately
@@ -87,9 +95,15 @@ PR/check/Actions write permissions.
 
 ## What it does not do
 
-- `factory:plan` performs **no AI planning**. It is a deterministic, readable
-  preview of the exact source/criteria you wrote into the issue. A future
-  AI-assisted suggestion tool would need separate cost/authority approval.
+- `factory:plan` is **AI-assisted and consumes Copilot usage**. Its first
+  comment is only the deterministic security snapshot; a second comment must
+  contain a genuinely useful validated implementation proposal. A model
+  failure leaves no usable approved plan. The plan is advisory, not a new
+  file grant, independent test result or permission to merge.
+- `factory:run` separately consumes Copilot usage for implementation.
+  The trusted Software host rechecks the exact AI-plan digest and includes
+  that advice in the builder context without widening authorized files.
+  Planning and building have distinct credentials, jobs and human decisions.
 - Labels do not authorize a successful Quality result, approval, merge or
   deployment. GitHub may require the maintainer to approve normal PR-triggered
   workflows after an Actions-created draft appears.
