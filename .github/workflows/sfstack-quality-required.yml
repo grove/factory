@@ -1,0 +1,41 @@
+name: sfstack quality required
+
+# A native, merge-recognized PR job. It is only a read-only witness to the
+# independent Quality Factory check, never a replacement for that assessment.
+# The separate PR signal workflow must finish promptly to dispatch Quality;
+# this job may wait for the result without holding the signal coordinator.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+
+permissions: {}
+
+jobs:
+  verify:
+    name: sfstack quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      actions: read
+    steps:
+      # Execute the verified gate implementation at an immutable Factory commit;
+      # never check out or execute PR candidate code in this trusted checker.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: grove/factory
+          ref: d2bb9be1fe9f472b5aaae99a33ad00810df6adfb
+          path: trusted
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+      - name: Authenticate the independent current PR Quality result without AI
+        working-directory: trusted
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python -m integrations.github.required_quality_gate
+          --event "$GITHUB_EVENT_PATH" --timeout-seconds 1800
