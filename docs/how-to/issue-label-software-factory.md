@@ -2,10 +2,12 @@
 
 **New target repository?** Install the SHA-pinned issue/Quality callers first using the [guided onboarding walkthrough](../getting-started-new-repository.md). This guide describes operating the feature *after* deployment.
 
-The ordinary GitHub Software Factory can also accept a **reviewed issue plan**
-and one explicit **human-applied label**. This avoids retyping the old
-multi-parameter `workflow_dispatch` form, while retaining exact path scope,
-independent verification, draft-only publication and human-controlled merging.
+The ordinary GitHub Software Factory accepts an explicit **human-applied**
+`factory:run` label against a bounded issue. An optional `factory:plan` label
+first purchases a Copilot-generated strategy for human review. Both routes
+retain exact path scope, independent verification, draft-only publication and
+human-controlled merging instead of the old multi-parameter
+`workflow_dispatch` form.
 
 The label coordinator is only activated in a repository after its trusted,
 SHA-pinned caller has been reviewed and merged. Do not install the caller
@@ -56,38 +58,47 @@ explicitly and `Regression file: tests/test_example.py`; otherwise the only
 `tests/test_*.py` path is selected for a `defect:` title. Any ambiguity or
 missing scope fails closed.
 
-## Two intentional clicks
+## Choose one of two human-authorized paths
 
-1. A repository **writer** adds `factory:plan` to an open issue, explicitly
-   authorizing **one paid Copilot planning call**. A trusted no-AI preflight
-   first pins the exact issue, base, accepted files and criteria. A separate
-   read-only model job sees limited source excerpts and proposes specific
-   implementation steps, per-criterion test methods, risks and open questions.
-   The model has no shell, write or GitHub publishing tools. A third independent
-   job validates its structured output and publishes the actual AI-assisted
-   proposal as a bot comment. Invalid output blocks; it never silently
-   reverts to repeating the issue. Review **that second comment**.
-2. When satisfied, a writer adds `factory:run` once. The label handler
-   verifies the actual GitHub event, author permission, same issue title/body,
-   original plan, immutable base SHA and one-run history; it writes a durable
-   one-shot claim. **Only then** can the pinned reusable Software Factory
-   receive its Copilot credential, implement and independently verify the
-   change, publish a draft PR, and request exact-head Quality.
+- **Direct (one paid build):** On a bounded open issue that has **not**
+  requested `factory:plan`, a repository writer adds `factory:run` once.
+  The trusted controller authenticates the label event and writer, parses the
+  issue into an exact file/criteria/base snapshot, and publishes a permanent
+  bot-authored **direct-mode run claim** before any paid builder starts.
+  This claim is the deterministic scope record; there is **no separate
+  Copilot planning job or AI-plan approval**. The human must have already
+  decided that the issue's own instructions justify implementation.
+- **AI-planned (two paid decisions):** First add `factory:plan`
+  as a writer to purchase one read-only Copilot implementation proposal.
+  The controller posts a deterministic scope snapshot, and a separate paid
+  model job proposes per-file actions, verification, risks and questions.
+  The independent trusted publisher validates the JSON and posts the
+  **second AI-assisted plan comment**. Review that bot-authenticated advice;
+  only then add `factory:run` once, which purchases a separate
+  implementation attempt bound to the validated plan digest.
 
-If the issue was edited, the plan no longer matches, or `main` advanced,
-remove and reapply `factory:plan` only after reviewing the new paid planning
-cost. The same unchanged issue and base cannot be billed for repeated plans;
-a failed plan request cannot authorize implementation. The issue must change
-or a separate explicitly authorized follow-up must be created.
-If a run has **already been claimed**, relabeling or rerunning will not
-automatically purchase a second build. Inspect its GitHub run and retained
-artifacts, reconcile any draft/check/dispatch before a new **separately
-authorized** issue and attempt. Do not erase claim comments to bypass recovery.
+Both paths retain a durable one-shot claim, the same restricted file allowlist
+and original acceptance criteria, actual host verification, draft-only PR
+publication, independent Quality and human-only merge. The reusable Software
+host reauthenticates the claim and rejects altered scope, issue text, base SHA,
+actor or run attempt. Direct mode carries **no** fabricated AI plan or digest;
+planned mode **must** include the original validated advice.
+
+If `factory:plan` has ever produced a trusted scope snapshot for
+the issue, even if its paid model or publisher failed, `factory:run`
+cannot fall back to direct mode. A still-present `factory:plan` label
+also blocks direct mode until the planning state is reconciled. If the
+issue or default branch changes after planning, request and review a fresh
+paid plan for the new snapshot; an unchanged failed attempt cannot simply
+be billed again. If a build has already been claimed, relabeling or rerunning
+will not purchase another one: inspect its run and retained artifacts and
+reconcile any pending writes before a separately authorized follow-up issue.
+Do not erase bot claim comments to bypass recovery.
 
 The coordinator authenticates the original human labeler through the GitHub
 Actions run, the original `issues:labeled` event payload, and live repository
 writer permission. A bot, triage user, reader, edited issue or stale plan
-cannot authorize model work. The GitHub Actions bot's plan and claim comments
+cannot authorize model work. The GitHub Actions bot's claim and, when requested, plan comments
 are independently re-read; an issue-body instruction is never a credential,
 workflow path, command or policy override. Neither the authorizer nor builder
 gets GitHub publication rights; only the trusted publisher receives scoped
@@ -95,15 +106,15 @@ PR/check/Actions write permissions.
 
 ## What it does not do
 
-- `factory:plan` is **AI-assisted and consumes Copilot usage**. Its first
-  comment is only the deterministic security snapshot; a second comment must
-  contain a genuinely useful validated implementation proposal. A model
-  failure leaves no usable approved plan. The plan is advisory, not a new
-  file grant, independent test result or permission to merge.
+- `factory:plan` is **optional AI-assisted planning** and consumes
+  Copilot usage. Its first comment is only the deterministic scope snapshot;
+  its second comment must contain validated advisory implementation steps.
+  A model failure never authorizes a build or direct-mode fallback.
 - `factory:run` separately consumes Copilot usage for implementation.
-  The trusted Software host rechecks the exact AI-plan digest and includes
-  that advice in the builder context without widening authorized files.
-  Planning and building have distinct credentials, jobs and human decisions.
+  The trusted Software host verifies the exact direct-mode one-shot claim
+  **or** the existing planned-mode digest and approved advice. Neither mode
+  widens allowed files or acceptance criteria, and both retain independent
+  verification and human review.
 - Labels do not authorize a successful Quality result, approval, merge or
   deployment. GitHub may require the maintainer to approve normal PR-triggered
   workflows after an Actions-created draft appears.
