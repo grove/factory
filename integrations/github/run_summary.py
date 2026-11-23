@@ -159,6 +159,7 @@ def usage(repo, run, artifacts, archive=None):
                         "Missing, duplicate, or oversized usage member.")
                 return automation.strict_json(bundle.read(matches[0]))
             info, metrics = read("aw_info.json"), read("agent_usage.json")
+        require(isinstance(info, dict) and isinstance(metrics, dict), "Malformed usage records.")
         require(info.get("repository") == repo and info.get("run_id") == run["id"]
                 and str(info.get("run_attempt")) == str(run["run_attempt"])
                 and info.get("sha") == run["head_sha"]
@@ -305,6 +306,11 @@ def summarize(api, repo, run_id, usage_zip=None, quality_usage_zip=None):
         "verification": matching_job(jobs, "Apply and verify the bounded proposal"),
         "draft_publication": matching_job(jobs, "Open a draft PR and request quality assessment"),
     }
+    if label == "factory:plan":
+        report["planning_evidence"] = {
+            "inputs": evidence(artifacts, f"sfstack-ai-plan-inputs-{run['run_attempt']}"),
+            "proposal": evidence(artifacts, f"sfstack-ai-plan-proposal-{run['run_attempt']}"),
+        }
     if mode["mode"] == "planned":
         previous = reads.run(mode["planning_run_id"], LABEL_PATH, "issues", branch)
         require(previous["run_attempt"] == 1 and previous["head_sha"] == run["head_sha"]
