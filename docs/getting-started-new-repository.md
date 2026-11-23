@@ -172,7 +172,7 @@ through ordinary protected-branch review. The tool never approves or merges.
    CI passes there. Never manually launch a production build merely to see
    whether the workflow is visible.
 
-## First exercise: free plan, then deliberate paid build
+## First exercise: deliberate paid planning, then separately authorized paid build
 
 Create an open issue using **Software Factory work item**, for example:
 
