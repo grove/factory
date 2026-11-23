@@ -93,6 +93,21 @@ class OnboardRepositoryTests(unittest.TestCase):
         self.assertIn("COPILOT_GITHUB_TOKEN", model)
         self.assertNotIn("issues: write", model)
 
+    def test_direct_run_does_not_require_or_start_the_separate_paid_plan_job(self):
+        label = onboarding.render("example/repo", "main", FACTORY_REVISION)[
+            ".github/workflows/sfstack-issue-label.yml"
+        ]
+        authorize = label.split("\n  authorize:\n", 1)[1].split("\n  plan:\n", 1)[0]
+        model = label.split("\n  plan:\n", 1)[1].split("\n  publish_plan:\n", 1)[0]
+        software = label.split("\n  software:\n", 1)[1]
+        self.assertIn("github.event.label.name == 'factory:run'", authorize)
+        self.assertIn("if: github.event.label.name == 'factory:plan'", authorize)
+        self.assertIn("needs.authorize.outputs.plan_requested == 'true'", model)
+        self.assertIn("needs.authorize.outputs.authorized == 'true'", software)
+        self.assertNotIn("COPILOT_GITHUB_TOKEN", authorize)
+        self.assertIn("COPILOT_GITHUB_TOKEN", model)
+        self.assertIn("COPILOT_GITHUB_TOKEN", software)
+
     def test_custom_default_branch_is_escaped_and_exact(self):
         files = onboarding.render("another/target-repo", "release/v2", FACTORY_REVISION)
         self.assertIn('branches: ["release/v2"]', files[".github/workflows/sfstack-quality-events.yml"])
