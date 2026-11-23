@@ -103,6 +103,126 @@ class RequiredQualityGateTests(unittest.TestCase):
         self.api.check["status"] = "in_progress"
         self.assertEqual("pending", self.result()[0])
 
+    def test_positive_check_waits_for_exact_workflow_completion(self):
+        for status in ("queued", "in_progress"):
+            with self.subTest(status=status):
+                self.api = GitHubReads()
+                self.api.run.update(status=status, conclusion=None)
+                self.assertEqual("pending", self.result()[0])
+                self.assertFalse(any("/jobs?" in p or "/artifacts?" in p
+                                     for p in self.api.requests))
+                self.api.run.update(status="completed", conclusion="success")
+                self.assertEqual("passed", self.result()[0])
+
+    def test_wait_polls_until_authenticated_run_completes(self):
+        self.api.run.update(status="in_progress", conclusion=None)
+        times = iter([0, 1])
+        sleeps = []
+
+        def complete(seconds):
+            sleeps.append(seconds)
+            self.api.run.update(status="completed", conclusion="success")
+
+        self.assertTrue(wait_for_quality(
+            self.api, REPO, self.api.event, timeout_seconds=4,
+            interval_seconds=1, monotonic=lambda: next(times), sleep=complete))
+        self.assertEqual([1], sleeps)
+
+    def test_pending_workflow_identity_must_be_authenticated_first(self):
+        for change in (
+            {"id": 4321}, {"workflow_id": 999}, {"path": ".github/workflows/other.yml"},
+            {"event": "workflow_run"}, {"head_branch": "other"},
+            {"head_sha": "f" * 40}, {"run_attempt": 2},
+            {"display_title": "Unrelated assessment"},
+            {"repository": {"full_name": "other/repo"}},
+            {"head_repository": {"full_name": "other/repo"}},
+        ):
+            with self.subTest(change=change):
+                self.api = GitHubReads()
+                self.api.run.update(status="in_progress", conclusion=None)
+                self.api.run.update(change)
+                self.assertEqual("blocked", self.result()[0])
+
+    def test_non_successful_or_inconsistent_run_states_block(self):
+        for status, conclusion in (("completed", "failure"), ("completed", "cancelled"),
+                                   ("completed", None), ("in_progress", "failure"),
+                                   ("queued", "success"), ("unknown", None)):
+            with self.subTest(status=status, conclusion=conclusion):
+                self.api = GitHubReads()
+                self.api.run.update(status=status, conclusion=conclusion)
+                self.assertEqual("blocked", self.result()[0])
+
+    def test_timeout_during_authenticated_completion_remains_nonpassing(self):
+        self.api.run.update(status="in_progress", conclusion=None)
+        times = iter([0, 5])
+        sleeps = []
+        self.assertFalse(wait_for_quality(
+            self.api, REPO, self.api.event, timeout_seconds=4,
+            monotonic=lambda: next(times), sleep=sleeps.append))
+        self.assertEqual([], sleeps)
+
+    def retire_check(self):
+        self.api.check.update(conclusion="failure", output={
+            "title": "Quality assessment superseded",
+            "summary": ("A newer assessment requires fresh evidence. "
+                        "This result no longer grants quality clearance."),
+        })
+
+    def test_supersession_gap_never_reuses_retired_clearance(self):
+        successor = deepcopy(self.api.check)
+        self.retire_check()
+        self.assertEqual("pending", self.result()[0])
+        successor.update(id=55, status="in_progress", conclusion=None)
+        successor["external_id"] = owner_text(owner(
+            8, BASE, "run", 1234, 1, "123-1", 3, intent=pr_intent_digest(self.api.pr)))
+        self.api.checks.append(successor)
+        self.assertEqual("pending", self.result()[0])
+        successor.update(status="completed", conclusion="success")
+        self.assertEqual("passed", self.result()[0])
+
+    def test_negative_quality_cannot_masquerade_as_supersession(self):
+        self.retire_check()
+        self.api.check["output"]["summary"] = "A real negative assessment."
+        self.assertEqual("blocked", self.result()[0])
+        self.retire_check()
+        self.api.check["app"]["id"] = 123
+        self.assertEqual("blocked", self.result()[0])
+
+    def test_generation_change_during_evidence_reads_never_passes(self):
+        successor = deepcopy(self.api.check)
+        successor.update(id=55, status="in_progress", conclusion=None)
+        successor["external_id"] = owner_text(owner(
+            8, BASE, "run", 1234, 1, "123-1", 3, intent=pr_intent_digest(self.api.pr)))
+        original_get = self.api.get
+
+        def get(path):
+            result = original_get(path)
+            if "/artifacts?" in path:
+                self.retire_check()
+                self.api.checks.append(successor)
+            return result
+
+        self.api.get = get
+        self.assertEqual("pending", self.result()[0])
+
+    def test_check_retired_or_failed_during_evidence_reads_never_passes(self):
+        for retired in (True, False):
+            with self.subTest(retired=retired):
+                self.api = GitHubReads()
+                original_get = self.api.get
+
+                def get(path):
+                    result = original_get(path)
+                    if "/artifacts?" in path:
+                        if retired:
+                            self.retire_check()
+                        else:
+                            self.api.check["conclusion"] = "failure"
+                    return result
+
+                self.api.get = get
+                self.assertEqual("pending" if retired else "blocked", self.result()[0])
+
     def test_fail_closed_on_negative_quality_and_wrong_app_or_provenance(self):
         for attr, val in (("conclusion", "failure"), ("status", "cancelled")):
             with self.subTest(attr=attr):

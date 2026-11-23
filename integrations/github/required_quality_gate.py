@@ -40,6 +40,17 @@ def pending(reason):
     return "pending", reason
 
 
+def superseded(check):
+    """Recognize only the coordinator's explicit, nonpassing retirement state."""
+    output = check.get("output") or {}
+    return (check.get("status") == "completed"
+            and check.get("conclusion") == "failure"
+            and output.get("title") == "Quality assessment superseded"
+            and isinstance(output.get("summary"), str)
+            and output["summary"].startswith(
+                "A newer assessment requires fresh evidence. This result no longer grants quality clearance."))
+
+
 def snapshot(api, repository, event):
     """Return (passed|pending|blocked, reason) using only authenticated API reads."""
     if not REPOSITORY.fullmatch(repository):
@@ -73,7 +84,8 @@ def snapshot(api, repository, event):
     if not SHA.fullmatch(tip):
         return fail("Default-branch SHA is invalid.")
     intent = pr_intent_digest(pr)
-    check = Host(api, {"repository": repository, "run_id": "1", "run_attempt": "1"}).find_check(pr)
+    host = Host(api, {"repository": repository, "run_id": "1", "run_attempt": "1"})
+    check = host.find_check(pr)
     if check is None:
         return pending("No trusted Quality check has been published for this PR head.")
     owner = check_owner(check)
@@ -86,6 +98,10 @@ def snapshot(api, repository, event):
     if check.get("status") != "completed":
         return pending("Trusted Quality assessment is still pending.")
     if check.get("conclusion") != "success":
+        # replace_check retires the old check before POSTing its successor.
+        # Poll for the successor, never reuse the retired result.
+        if superseded(check):
+            return pending("The trusted Quality assessment was superseded; awaiting its successor.")
         return fail("The current trusted Quality assessment did not pass.")
     output = check.get("output") or {}
     if (output.get("title") != "Quality passed"
@@ -96,17 +112,23 @@ def snapshot(api, repository, event):
     workflow = api.get(prefix + "/actions/workflows/" + QUALITY_WORKFLOW)
     run = api.get(prefix + f"/actions/runs/{run_id}")
     expected_title = f"sfstack quality / PR #{number} / request {owner['q']}"
-    if (run.get("workflow_id") != workflow.get("id")
+    if (run.get("id") != run_id
+            or run.get("workflow_id") != workflow.get("id")
             or workflow.get("path") != ".github/workflows/" + QUALITY_WORKFLOW
             or run.get("path") != workflow["path"]
             or run.get("event") != "workflow_dispatch"
             or run.get("head_branch") != branch or run.get("head_sha") != tip
-            or run.get("run_attempt") != attempt or run.get("status") != "completed"
-            or run.get("conclusion") != "success"
+            or run.get("run_attempt") != attempt
             or run.get("display_title") != expected_title
             or run.get("repository", {}).get("full_name", "").lower() != repository.lower()
             or run.get("head_repository", {}).get("full_name", "").lower() != repository.lower()):
-        return fail("The published check is not backed by a completed trusted Quality workflow.")
+        return fail("The published check is not backed by the exact trusted Quality workflow.")
+    # The publisher writes its check before GitHub marks the workflow completed.
+    # Authenticate identity first; only then wait for a matching active run.
+    if run.get("status") in {"queued", "in_progress"} and run.get("conclusion") is None:
+        return pending("The authenticated Quality workflow is still completing.")
+    if run.get("status") != "completed" or run.get("conclusion") != "success":
+        return fail("The published check is not backed by a completed successful trusted Quality workflow.")
     jobs_response = api.get(prefix + f"/actions/runs/{run_id}/jobs?per_page=100")
     jobs = jobs_response.get("jobs", [])
     if (type(jobs_response.get("total_count")) is not int
@@ -139,6 +161,24 @@ def snapshot(api, repository, event):
             or last_pr.get("head", {}).get("repo", {}).get("full_name", "").lower() != repository.lower()
             or pr_intent_digest(last_pr) != intent or last_tip != tip):
         return fail("The PR head, base, or reviewed intent changed while verifying the gate.")
+    # Re-read ownership after reading jobs and artifacts. A newer assessment
+    # can retire this result without changing the PR head, base or intent.
+    latest = host.find_check(last_pr)
+    if latest is None:
+        return fail("The authenticated Quality check disappeared while verifying the gate.")
+    latest_owner = check_owner(latest)
+    if (latest.get("app", {}).get("id") != ACTIONS_APP_ID or not latest_owner
+            or latest_owner.get("v") != 3):
+        return fail("Quality check provenance changed while verifying the gate.")
+    if latest_owner != owner:
+        if latest_owner["g"] > owner["g"]:
+            return pending("A newer Quality generation appeared while verifying the gate.")
+        return fail("Quality generation identity changed while verifying the gate.")
+    if superseded(latest):
+        return pending("The trusted Quality assessment was superseded while verifying the gate.")
+    if (latest.get("id") != check.get("id") or latest.get("status") != "completed"
+            or latest.get("conclusion") != "success" or latest.get("output") != output):
+        return fail("The authenticated Quality result changed while verifying the gate.")
     return "passed", f"Trusted independent Quality passed: run {run_id}, check {check['id']}, head {head}, base {tip}."
 
 
