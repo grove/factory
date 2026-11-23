@@ -15,12 +15,12 @@ The current [supported profile](reference/configuration.md) does not include arb
 
 ## Quick start: preview first, then make an installation PR
 
-Replace `YOURORG/YOURREPO`, `main` and the Factory revision with your actual target, default branch and reviewed full commit SHA.
+Replace `YOURORG/YOURREPO` and `main` with your actual target and default branch. The example uses the reviewed pilot baseline at `e7045bc934f504bebf1a6d06b0871fbcce1165b5` (the merged operational summary release candidate). Review that revision before installation, or select a newer explicitly reviewed full commit SHA.
 
 ```sh
 git clone https://github.com/grove/factory.git ~/factory
-# Select a reviewed full 40-character Factory commit.
-FACTORY_REVISION=REVIEWED_FACTORY_COMMIT_SHA
+# Reviewed pilot baseline; change only after reviewing a newer revision.
+FACTORY_REVISION=e7045bc934f504bebf1a6d06b0871fbcce1165b5
 git -C ~/factory checkout --detach "$FACTORY_REVISION"
 
 gh repo clone YOURORG/YOURREPO ~/yourrepo
