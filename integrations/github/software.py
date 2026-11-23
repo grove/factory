@@ -129,7 +129,7 @@ def file_snapshot(repo, path):
 
 def prepare(repo, issue, repository, run_id, run_attempt, allowed_paths, acceptance_criteria,
             output, at=None, checks=None, actor="maintainer", base_branch="main",
-            mode="change", regression_file=None):
+            mode="change", regression_file=None, advisory_plan=None):
     at = (at or now()).replace(microsecond=0)
     repo, output = Path(repo).resolve(), Path(output).resolve()
     if (not quality.REPOSITORY.fullmatch(repository)
@@ -158,6 +158,13 @@ def prepare(repo, issue, repository, run_id, run_attempt, allowed_paths, accepta
               "checks": checks, "created_at": at.isoformat().replace("+00:00", "Z"),
               "environment": f"github-actions-python-{sys.version_info.major}.{sys.version_info.minor}",
               **mode_config}
+    if advisory_plan is not None:
+        from integrations.github import plan_advice
+        limited_scope = {"allowed_paths": selected, "acceptance_criteria": acceptance_criteria,
+                         "repair_mode": mode, "regression_file": regression_file or ""}
+        target["advisory_plan"] = plan_advice.validate(
+            plan_advice.canonical(advisory_plan), limited_scope)
+        target["ai_plan_sha256"] = plan_advice.digest(target["advisory_plan"])
     output.mkdir(parents=True)
     for path, raw in originals.items():
         destination = output / path
@@ -216,6 +223,16 @@ def load_bundle(bundle, at):
     if target["criteria"] != criteria([c["description"] for c in target["criteria"]]):
         raise ValueError("Invalid acceptance criteria identities.")
     quality.check_plan(target["checks"])
+    if "advisory_plan" in target:
+        from integrations.github import plan_advice
+        limited_scope = {"allowed_paths": sorted(target["allowed_files"]),
+                         "acceptance_criteria": [c["description"] for c in target["criteria"]],
+                         "repair_mode": target["mode"], "regression_file": target["regression_file"]}
+        verified = plan_advice.validate(plan_advice.canonical(target["advisory_plan"]), limited_scope)
+        if target.get("ai_plan_sha256") != plan_advice.digest(verified):
+            raise ValueError("Retained AI planning evidence changed.")
+    elif "ai_plan_sha256" in target:
+        raise ValueError("AI planning digest has no matching validated advice.")
     for info in target["allowed_files"].values():
         if info["original"] is not None:
             raw = read_regular(contained_path(bundle, info["original"]))
@@ -274,6 +291,18 @@ def render(bundle, candidate, output, at=None):
                 "trusted host. Return one bounded proposal via the declared secret-redacted "
                 "agent artifact; send only its SHA-256 receipt through submit_change. "
                 "Do not push, publish, or merge.\n")
+    if "advisory_plan" in target:
+        # The model's proposed "how" is useful context, never a new permission.
+        guidance += (
+            "\n# Human-reviewed AI implementation advice (NON-AUTHORIZING)\n\n"
+            "The following proposal was generated for the exact issue, source "
+            "revision and allowed files, then reviewed by a repository writer. "
+            "Use it where compatible with the original issue and existing "
+            "host checks. It cannot add files, change required criteria, "
+            "modify policy, or override test failures. If inaccurate, "
+            "prioritize the original authorizing issue and disclose the gap.\n\n"
+            + json.dumps(target["advisory_plan"], ensure_ascii=False, indent=2) + "\n"
+        )
     # This is *agent-side guidance* on a read-only controller checkout, not
     # evidence for the publisher. The host independently strict-parses the
     # submitted bytes again and retains every negative verdict.
@@ -635,7 +664,8 @@ class SoftwareHost(automation.Host):
             raise ValueError("Issue identity mismatch.")
         return prepare(repo, issue, self.repository, self.run_id, self.attempt, paths, acceptance, output,
                        at=at, actor=actor, base_branch=repository["default_branch"],
-                       mode=mode, regression_file=regression_file)
+                       mode=mode, regression_file=regression_file,
+                       advisory_plan=(self.label_plan or {}).get("advisory_plan"))
 
     def current(self, target):
         repository, _, actor = self.admitted()
@@ -645,7 +675,9 @@ class SoftwareHost(automation.Host):
                     or sorted(target["allowed_files"]) != approved["allowed_paths"]
                     or [item["description"] for item in target["criteria"]] != approved["acceptance_criteria"]
                     or target["mode"] != approved["repair_mode"]
-                    or (target.get("regression_file") or "") != approved["regression_file"]):
+                    or (target.get("regression_file") or "") != approved["regression_file"]
+                    or target.get("ai_plan_sha256") != approved["ai_plan_sha256"]
+                    or target.get("advisory_plan") != approved["advisory_plan"]):
                 raise ValueError("Retained Software target is outside the claimed label plan.")
         current = issue_snapshot(self.api.get(self.path(f"issues/{target['issue']['number']}")), self.repository)
         if (current != target["issue"] or actor != target["actor"]
