@@ -44,7 +44,7 @@ class LiveRecoveryBoundaryTests(unittest.TestCase):
 
     def test_workflows_are_manually_triggered_no_ai_and_isolated(self):
         live = (ROOT / ".github/workflows/sfstack-live-recovery.yml").read_text()
-        noai = (ROOT / ".github/workflows/" + NO_AI).read_text()
+        noai = (ROOT / ".github/workflows" / NO_AI).read_text()
         for content in (live, noai):
             self.assertIn("  workflow_dispatch:", content)
             self.assertNotIn("  pull_request:", content)
