@@ -1,80 +1,53 @@
-# factory
+# Factory
 
-**GitHub Software Factory and Quality Factory, powered by sfstack contracts.**
+**Turn a scoped GitHub issue into a verified draft pull request. Independently assess any eligible pull request. You stay in control of what merges.**
 
-Software Factory turns one explicitly scoped issue into a verified draft pull
-request. Quality Factory independently assesses an existing pull request and
-publishes `sfstack quality` on its exact head. Both retain their evidence and
-leave approval and merge to a human.
-
-This repository owns GitHub events, Actions jobs, admission, credentials,
-candidate execution, durable publication, and recovery. The portable skill
-library, schemas, recipes, and policy engine remain in
-[`grove/sfstack`](https://github.com/grove/sfstack). The host invokes the installed,
-versioned `sfstack-contract` CLI; it does not import sfstack's private modules.
+Factory runs inside your repository's GitHub Actions. It uses Copilot for bounded implementation and review, and [sfstack](https://github.com/grove/sfstack) for portable skills, contracts and evidence validation.
 
 ## Start here
 
-- **[Getting started: install in another GitHub repository](docs/getting-started-new-repository.md)** — guided, SHA-pinned caller installation, offline no-AI installer preview, explicit target PR, setup checklist and safety limits.
-- [Install and validate the host](docs/installation.md), including manual cross-repository Quality reuse.
-- [Assess an existing pull request](docs/how-to/run-github.md).
-- [Build a bounded change or reproduce and repair a defect](docs/how-to/run-software-factory.md).
-- [Review the migration boundary and remaining live acceptance](docs/migration.md).
-- [Run the deterministic host regressions](evals/README.md).
-
-The host operates on the **calling** repository's own issues, pull requests,
-checks and credentials. It can be installed locally or called through pinned
-reusable workflows; it is not a central cross-repository service. Its existing limits on
-editable paths, candidate identity, credentials, and human approval remain in
-effect.
-
-## Validate locally
-
-Use Python 3.11 or newer in a virtual environment:
-
-```sh
-python -m venv .venv
-. .venv/bin/activate
-python tools/bootstrap_contracts.py
-python -m unittest discover -s tests -v
-python evals/run_github_regression.py --output dist/github-regression
-python evals/run_software_regression.py --output dist/software-regression
-python evals/run_defect_regression.py --output dist/defect-regression
-```
-
-Each regression output directory must be new. These commands run deterministic
-fixtures and real subprocess checks; they need neither GitHub credentials nor a
-model subscription. Fixture reviews do not establish human approval or live
-agent effectiveness.
-
-`sfstack.lock.json` records the exact core distribution, SHA-256, and source
-revision. The wheel in `vendor/` is an immutable build of that source; dependency
-installation verifies the lock before use. Its bundled skills and schemas come
-from sfstack's canonical package build.
-
-## Execution boundaries
-
-| Component | Responsibility |
+| I want to… | Go to |
 | --- | --- |
-| Software controller | Admit a selected issue, pin scope and base, reconstruct a bounded proposal, verify independently, and publish only a draft. |
-| Quality controller | Pin PR intent and head, run declared checks, obtain a bounded review, consolidate evidence, and publish an exact-head check. |
-| Event coordinator | Own assessment generations, reconcile interrupted runs, and invalidate stale clearance. |
-| Installed sfstack CLI | Resolve canonical skills, validate records and evidence, plan workflows, consolidate quality, and evaluate policy. |
-| Repository operator | Configure credentials and merge rules, review evidence, and decide whether to merge. |
+| Install Factory in my repository | [Install Factory](docs/getting-started-new-repository.md) |
+| Build a change from an issue | [Use issue labels](docs/how-to/issue-label-software-factory.md) |
+| Review an existing pull request | [Run Quality Factory](docs/how-to/run-github.md) |
+| Understand a failed run or usage | [Inspect a run](docs/how-to/inspect-factory-run.md) · [Troubleshooting](docs/how-to/troubleshooting.md) |
+| Understand or maintain Factory | [Documentation index](docs/README.md) |
 
-The workflows use ordinary GitHub Actions runners. They do not claim a hardened
-sandbox for hostile candidate code. Agents never receive the publisher's write
-credential, and a successful check is not a merge authorization.
+## How it works
 
-## Provenance
+1. Create an issue with exact files and observable acceptance criteria.
+2. Choose **direct**: apply `factory:run` once; or **planned**: apply `factory:plan`, review the validated AI proposal, then apply `factory:run` once.
+3. Factory implements the bounded change, independently verifies it, opens a draft PR and requests independent Quality.
+4. Review the actual change and evidence. Require current Quality and ordinary CI, then merge yourself.
 
-Extracted from `grove/sfstack` at
-[`7a4b56b4d1e34db124743d39fd694f2cd88463ea`](https://github.com/grove/sfstack/commit/7a4b56b4d1e34db124743d39fd694f2cd88463ea).
-The historical workflow names, artifact names, and `sfstack quality` check name
-are retained so their ownership and recovery identities remain stable.
-Historical run evidence remains linked to its original repository; it is not
-represented as a new factory acceptance run.
+Opening or editing an issue alone never starts implementation. Both labels require an authorized human writer. A claimed build cannot be restarted by relabeling.
 
-## License
+**Costs:** direct mode skips the separate paid planner, not the paid implementation or independent Quality assessment. Planned mode adds a paid planning call. Eligible PR events may also initiate paid Quality; ordinary Actions minutes and account billing are separate. [Inspect reported usage](docs/how-to/inspect-factory-run.md).
+
+## Is my repository supported?
+
+The current **pilot** is intentionally restricted:
+
+- Python 3.13 with substantive standard-library `unittest` tests that run without project-specific dependency installation.
+- One to eight exact files under `docs/`, `examples/`, `tests/`, or root `README.md`; no arbitrary application source trees, workflows, or dependency changes.
+- Same-repository PRs targeting the default branch, reviewed SHA-pinned callers, GitHub Actions, Copilot entitlement and required CI/Quality with human review.
+
+Other languages, test runners, dependency-heavy projects and broader edit scopes require a separately reviewed host profile. The runner is ordinary CI isolation, **not** a hostile-code sandbox.
+
+## Where the pieces live
+
+Factory owns GitHub events, authorization, credentials, independent candidate execution, durable publication and recovery. sfstack owns the portable skills, schemas, recipes and policy engine. Factory consumes sfstack through its installed, versioned public CLI, not private module imports. Your issues, PRs, checks, credentials and evidence remain in your repository.
+
+<a id="validate-locally"></a>
+<a id="execution-boundaries"></a>
+
+For maintainer setup and deterministic regressions, see [Install and validate the host](docs/installation.md). For security and integration details, see [Architecture and trust boundaries](docs/explanation/trust-boundaries.md).
+
+<a id="provenance"></a>
+
+[Historical evidence and migration](docs/history.md) records the pilot results and their limitations. It is not a setup procedure.
+
+<a id="license"></a>
 
 [Apache License 2.0](LICENSE).

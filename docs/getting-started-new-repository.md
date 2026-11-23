@@ -1,60 +1,43 @@
-# Getting started: install Software and Quality Factory in another GitHub repository
+# Install Factory in your GitHub repository
 
-**Start here if you maintain a repository that does not yet have sfstack Factory.**
-This guide installs small, version-pinned GitHub Actions *callers* in your own
-repository. The implementation stays in [`grove/factory`](https://github.com/grove/factory);
-your issues, pull requests, credentials, logs, verification runs, and checks stay
-in **your** repository. There is no server, cross-repository credential, or
-automatic merge service to provision.
+Install once, then use issue labels to build small verified changes. Factory adds reviewed, version-pinned GitHub Actions callers; it does not replace your CI or take control of merges.
 
-**What you will have:** write a bounded issue using an issue template and
-apply `factory:run` once to authorize a paid Copilot build **directly**, or
-first apply optional paid `factory:plan` to review a separate read-only
-AI implementation proposal before choosing to build. Either route produces
-independently verified output as a *draft PR*, with separate Quality and
-ordinary CI. **You** review and decide whether to merge.
+## Before you begin
 
-**Important limitation:** this first installer supports only the reviewed
-**Python-unittest pilot profile**. Its pinned Factory host runs
-`python -m unittest discover -s tests -v` inside ordinary GitHub Actions with
-Python 3.13. The repository must already have substantive discoverable tests
-that run without installing project-specific dependencies. Existing Software
-Factory edit policy permits **only exact** `docs/`, `examples/`, `tests/` files
-or root `README.md`; it cannot change your `src/` or `lib/` tree. The installer
-does *not* make a Node, Go, Rust, pytest-only, dependency-heavy, or arbitrary
-source-layout project compatible. [Other projects](#other-languages-and-custom-checks)
-need a separate reviewed host policy/verification change **before** a paid run.
+You need:
+
+- A GitHub repository whose Python 3.13 standard-library `unittest` suite runs substantive tests without extra project dependencies. Verify it in ordinary CI with `python -B -m unittest discover -s tests -v`.
+- Work that fits exact paths under `docs/`, `examples/`, `tests/` or root `README.md`.
+- Git, Python 3.11+, GitHub CLI (`gh`), write access and a clean target checkout. A maintainer must configure secrets and required checks.
+- A reviewed immutable Factory commit. Do not use an arbitrary tag, branch or PR source.
+
+The current [supported profile](reference/configuration.md) does not include arbitrary application source trees, workflow edits or other test stacks.
 
 ## Quick start: preview first, then make an installation PR
 
-Requirements: Git, Python 3.11+, the [GitHub CLI](https://cli.github.com/)
-(`gh`) authenticated to your own repository, and a **clean checkout** of your
-project's current default branch. Have the factory source available in a
-separate directory; use a reviewed, immutable Factory revision, not an
-unreviewed PR or a branch supplied by issue text.
+Replace `YOURORG/YOURREPO` and `main` with your actual target and default branch. The example uses the reviewed pilot baseline at `e7045bc934f504bebf1a6d06b0871fbcce1165b5` (the merged operational summary release candidate). Review that revision before installation, or select a newer explicitly reviewed full commit SHA.
 
 ```sh
-# 1. Obtain and review the Factory source in a separate directory.
 git clone https://github.com/grove/factory.git ~/factory
-# Only after reviewing the current Factory release:
-FACTORY_REVISION="$(git -C ~/factory rev-parse HEAD)"
-# Pin the full immutable revision; never choose a mutable branch in the caller.
+# Reviewed pilot baseline; change only after reviewing a newer revision.
+FACTORY_REVISION=e7045bc934f504bebf1a6d06b0871fbcce1165b5
+git -C ~/factory checkout --detach "$FACTORY_REVISION"
 
-# 2. Clone YOUR GitHub repo and update its default branch.
 gh repo clone YOURORG/YOURREPO ~/yourrepo
 git -C ~/yourrepo switch main
 git -C ~/yourrepo pull --ff-only origin main
 
-# 3. Preview the files and SHA-256 hashes: this does NOT write anything.
 python ~/factory/tools/onboard_repository.py \
   --repository YOURORG/YOURREPO \
   --default-branch main \
   --factory-revision "$FACTORY_REVISION"
+```
 
-# 4. Explicitly request a reviewable installation PR in YOUR repo.
-# This checks a clean checkout, target identity, test inventory and current base;
-# it creates a NEW local branch, commits only the generated files, pushes that
-# branch without force and opens a PR. It never merges or configures settings.
+This preview is offline. It shows the files and their SHA-256 hashes without writing to GitHub, executing target code or invoking Copilot.
+
+To create the installation PR explicitly:
+
+```sh
 python ~/factory/tools/onboard_repository.py \
   --repository YOURORG/YOURREPO \
   --default-branch main \
@@ -63,173 +46,37 @@ python ~/factory/tools/onboard_repository.py \
   --create-pr
 ```
 
-Replace `YOURORG/YOURREPO` and `main` with **your** exact repository and default
-branch. Before step 4, review the pinned Factory source and ensure that your
-project satisfies the [prerequisites](#before-you-begin). If you use a branch
-other than `main`, supply its exact name (for example, `release/v2`). The
-installer binds the label guard to your repository and the Quality event filter
-to your branch. It requires a reviewed exact `--factory-revision`, because the
-new label workflow must use the same immutable Factory commit for its coordinator
-and paid AI planning path. Never use `@main` or an unreviewed commit. The Quality
-event workflows retain their separately reviewed matching SHA pins.
-
-The tool does not automatically clone Factory dependencies, run target code,
-call Copilot, or contact GitHub during a preview. **Only** `--create-pr` uses
-your Git and `gh` credentials to fetch the current base, push a new branch and
-open a PR. You can avoid all target-repository writes by using the [offline
-bundle](#offline-review-or-no-github-cli) mode.
-
-## Before you begin
-
-1. **Confirm the project is eligible.** Your repository has a `tests/` tree with
-   discoverable `test_*.py` tests, and the complete Python 3.13 standard-library
-   `unittest` suite works *without installing extra project dependencies*.
-   The installer checks for test files but **does not execute tests**. Run the
-   command below yourself or, preferably, through your existing unprivileged
-   CI. Test discovery must execute genuine tests with no skips or expected
-   failures to qualify as positive Factory verification:
-
-   ```sh
-   python -B -m unittest discover -s tests -v
-   ```
-
-2. **Check your target file scope.** Only `docs/`, `examples/`, `tests/`, and
-   root `README.md` are supported by this reviewed pilot. If you need changes
-   to `.github/workflows/`, `src/`, `lib/`, lockfiles, dependencies, or other
-   source trees, stop: the bounded host policy must be changed and reviewed
-   separately. Do not attempt to bypass it through an issue label.
-3. **Keep your current CI.** The generated seven files do **not** copy
-   `grove/sfstack`'s `validate.yml`, because that workflow tests sfstack's own
-   modules and is not usable in your repository. Maintain real independent
-   project CI triggered on `pull_request` and on your default-branch push.
-   The installer does not authenticate or configure your CI policy.
-4. **Check repository access.** You need write access to create the installation
-   PR and maintainer/admin access for setting secrets and protected-branch
-   requirements. The new reusable workflows refer to a **public, immutable**
-   Factory revision; an issue cannot select a different revision.
-5. **Protect your main branch.** Keep required PR review/CI, strict up-to-date
-   required status checks and no administrator bypass or force pushes. For a
-   solo maintainer, GitHub can require **zero** external approvals while still
-   requiring a PR and successful checks; teams can require reviews as their
-   policy demands. The installer does **not** update branch protection.
+The installer checks repository identity, a clean current checkout and test-file inventory. It creates a new branch, commits only the seven generated files, pushes without force and opens a reviewable PR. It refuses existing caller files: a partial or previous installation needs an upgrade review, not an overwrite.
 
 ## Review the installation PR
 
-Your PR will propose exactly **seven** files:
+Review the [seven generated files](reference/configuration.md#installed-files-and-source-pins). Verify the exact target repository, default-branch filter, immutable Factory pins, permissions and intended verification profile. Keep the existing project CI. Do not copy sfstack's own CI into your project.
 
-| File | Purpose |
-| --- | --- |
-| `.github/workflows/sfstack-issue-label.yml` | Receive `issues:labeled`, authenticate a human writer, make a one-shot direct build claim **or** optional isolated paid AI planning followed by a verified plan and separate build claim |
-| `.github/workflows/sfstack-software.yml` | Preserve the manual issue-to-draft fallback |
-| `.github/workflows/sfstack-quality.yml` | Receive trusted manual/automatic Quality dispatch and call pinned Quality Factory |
-| `.github/workflows/sfstack-pr-signal.yml` | Emit a zero-token PR event signal |
-| `.github/workflows/sfstack-quality-events.yml` | Reconcile and invalidate stale checks, dispatch new exact-head Quality, **not** launch AI on default-branch pushes |
-| `.github/workflows/sfstack-quality-required.yml` | Native read-only `sfstack quality` PR check that authenticates separate Quality evidence |
-| `.github/ISSUE_TEMPLATE/factory-work-item.md` | Friendly issue template with exact paths and observable criteria |
+Approve any normal PR workflows GitHub requires after reviewing the proposed changes. Merge the installation PR yourself.
 
-**Review carefully:** the new label workflow's `github.repository` must exactly
-match your target; the event coordinator's `push.branches` must use your
-current default branch. Factory source and reusable-workflow refs must be **40-
-character immutable SHAs**, never `@main`, tags or issue-supplied refs. The
-Quality caller and Quality event coordinator must use the *same* Factory pin.
-Different existing reviewed pins for the native Quality gate, manual Software
-caller, and label Software caller are intentional; don't replace them with a
-mutable latest version to make them look uniform.
+## Configure GitHub once, after review and merge
 
-If any of these seven paths already exists, the installer **refuses to
-overwrite** it. Integrating into a repository with an existing partial Factory
-installation is an upgrade/migration requiring separate review, not a safe
-first install. The generated manifest contains per-file SHA-256 hashes for a
-read-only audit and has no secret values.
+1. In **Settings → Secrets and variables → Actions**, set `COPILOT_GITHUB_TOKEN` using an entitled credential supported by the [Copilot engine](https://github.github.com/gh-aw/engines/copilot/). The CLI can prompt securely: `gh secret set COPILOT_GITHUB_TOKEN -R YOURORG/YOURREPO`.
+2. In **Settings → Actions → General → Workflow permissions**, keep default permissions read-only where permitted. Allow GitHub Actions to create and approve pull requests so the scoped publisher can create drafts. This is a repository-wide permission with security implications; Factory never approves or merges.
+3. Under **Issues → Labels**, create exactly `factory:plan` and `factory:run`.
+4. Protect the default branch: require ordinary project CI, the exact **sfstack quality** check from GitHub Actions, up-to-date branches and human review. A visible check alone is not merge enforcement.
+5. Confirm the callers are on the default branch and ordinary CI passes.
 
-Normal PR checks may require a maintainer to approve a workflow before they run.
-Read the diff and CI evidence, then **merge the installation PR yourself**
-through ordinary protected-branch review. The tool never approves or merges.
+The installer never changes these settings, creates secrets, applies labels, starts paid work or merges.
 
-## Configure GitHub once, *after review and merge*
+## First work item
 
-1. In your target repo **Settings → Secrets and variables → Actions**, set
-   `COPILOT_GITHUB_TOKEN` to a token compatible with the [GitHub Copilot
-   engine](https://github.github.com/gh-aw/engines/copilot/) and its entitlement.
-   From a trusted terminal, you can run `gh secret set COPILOT_GITHUB_TOKEN
-   -R YOURORG/YOURREPO` to enter it without putting the token on a command
-   line. Never include its value in an issue, PR comment or workflow file.
-2. In **Settings → Actions → General → Workflow permissions**, keep the default
-   workflow permissions at **Read repository contents and packages** where
-   permitted, and allow **GitHub Actions to create and approve pull requests**
-   so the *scoped trusted publisher* can create **drafts**. This is a repository-
-   wide toggle that also permits eligible workflow approvals; consider its
-   security impact. The Factory never calls a PR approval or merge operation.
-3. Create exactly two issue labels in **Issues → Labels**:
-   `factory:plan` and `factory:run` (spelling/case matters). The PR intentionally
-   does not create them or pre-apply either label to any issue.
-4. Configure your existing branch protection or ruleset to require an up-to-date
-   GitHub Actions **`sfstack quality`** check, alongside your own required CI
-   checks; use the **GitHub Actions** check source rather than a name-only
-   context that another app could spoof. The native required-Quality workflow
-   is included because dispatch-only custom checks are not always eligible
-   as a required PR check. Preserve human-controlled merges.
-5. Confirm all workflows appear on the target's default branch and ordinary
-   CI passes there. Never manually launch a production build merely to see
-   whether the workflow is visible.
+Choose an actual small documentation improvement. In **Issues → New issue → Software Factory work item**, describe the problem, list exact permitted files and state concrete acceptance criteria.
 
-## First exercise: deliberate paid planning, then separately authorized paid build
+For a clear issue, a human writer can apply `factory:run` once. The bot records a permanent claim and starts one paid implementation; independent Quality also uses Copilot. For a more uncertain issue, apply optional paid `factory:plan` first, review the validated second bot comment, then decide whether to authorize the build separately.
 
-This example chooses the **optional paid planning route** to demonstrate both
-authorizations. For a straightforward, sufficiently detailed issue, a writer
-may instead apply `factory:run` directly, skipping separate paid planning.
-The bot posts a durable exact-scope direct-run claim before the builder starts.
-Do not use this shortcut after a `factory:plan` request, even if that
-planning attempt failed. See [both modes and guardrails](how-to/issue-label-software-factory.md).
+Follow [Build with issue labels](how-to/issue-label-software-factory.md) for the complete example, claim checks and review steps. A successful build produces a draft PR, not merge authorization. A human reviews the candidate, current Quality and CI, then decides whether to merge.
 
-Create an open issue using **Software Factory work item**, for example:
-
-```md
-Title: docs: clarify the getting-started instructions
-
-## Problem
-First-time readers need a short, accurate setup explanation.
-
-## Files to change
-- `docs/getting-started.md`
-
-## Acceptance criteria
-1. Add a short setup overview with the real prerequisites.
-2. Explain how to confirm the project tests pass.
-```
-
-1. Apply `factory:plan` **as a human with write permission**. This explicitly
-   authorizes a **paid Copilot planning call** but no implementation. In the
-   `sfstack issue-label Software Factory` Actions run, expect **two** bot
-   comments: first an exact deterministic authorization snapshot; second
-   a proposed implementation plan with concrete file-level work, independent
-   verification, risks and questions. The planning job cannot execute or
-   publish source code. It does not
-   create a PR. Confirm exact files, criteria, mode and pinned base.
-2. Only if you want to spend Copilot usage, add `factory:run` **once**, as a
-   writer. The trusted handler makes a durable one-shot claim and starts the
-   existing Software Factory. It independently runs the configured tests,
-   creates only a **draft PR**, and requests exact-head Quality.
-3. Review the draft, its retained gate evidence and the independent
-   `sfstack quality` result. If GitHub blocks PR-triggered CI in an
-   `action_required` state, approve those normal workflows in the UI. Never
-   treat a successful build alone as permission to merge.
-4. Merge **manually** only when all current-head CI/Quality checks are green
-   and the change satisfies your issue. Check post-merge CI and close the issue.
-
-**No automatic reruns:** editing the issue or advancing the default branch
-invalidates the plan. Remove/reapply `factory:plan` only if you explicitly
-authorize another paid planning call for the changed scope/base, then review
-the new AI proposal; do **not** simply relabel `factory:run`. Once a run is claimed, its
-claim is permanent and relabeling cannot buy another build. Inspect existing
-PR, check and Actions identities, then open a separately authorized follow-up
-issue if needed. See [label troubleshooting](how-to/issue-label-software-factory.md)
-for the exact safety boundary.
+Do not relabel a claimed issue to retry it or use direct mode to bypass failed planning.
 
 ## Offline review or no GitHub CLI
 
-To render a **fresh offline bundle** without GitHub, target Git writes, or
-model calls:
+Use a new output directory:
 
 ```sh
 python ~/factory/tools/onboard_repository.py \
@@ -239,55 +86,27 @@ python ~/factory/tools/onboard_repository.py \
   --output /tmp/factory-install-review-001
 ```
 
-The new directory contains the seven `.github` files plus
-`install-plan.json` with SHA-256 hashes. Read the manifest and workflows.
-Then create a branch in your own clean target clone, copy **only** the
-`.github` files into that branch, and open a PR using GitHub's web UI or a
-normal authenticated Git client. The manifest is for reviewing the generated
-bundle, not a required target workflow or secret. Never copy the sample
-`grove/sfstack` CI workflow into an unrelated project.
+Review the seven generated files and `install-plan.json`. Copy only the generated `.github` files to a new branch of your clean target checkout and open a normal PR. The manifest is for review, not a target workflow. No GitHub access or model call is needed for rendering.
 
 ## Common problems and recovery
 
-| Symptom | Meaning and safe action |
-| --- | --- |
-| Installer says `Output directory already exists` | It will not overwrite an earlier bundle. Use a fresh output path. |
-| Installer refuses an existing caller file | It found a partial/current Factory installation. Treat it as an upgrade requiring a new human-reviewed diff; don't overwrite silently. |
-| Installer says the target is stale or dirty | Commit/remove your own local work, update the exact default branch and retry **only after inspecting the current checkout**. |
-| Installer created a branch but the push or `gh pr create` failed | Do not blindly rerun. Inspect the local branch, GitHub's remote branch and any existing installation PR; continue the interrupted PR operation manually without force-pushing. No paid build is dispatched by the installer. |
-| No AI plan comment **after** `factory:plan` | Inspect the planning Jobs and Copilot access. The first scope snapshot is not approval. If planning was requested, do not apply `factory:run` until validated model advice is published; direct builds never require an AI plan comment. |
-| `factory:run` rejected as stale | Issue text or base changed after planning; reapply `factory:plan` and review the new preview before any new authorization. |
-| A durable claim exists | Never delete the bot claim comment or reapply `factory:run` to restart; reconcile its original run/PR/check instead. |
-| PR is blocked in `action_required` | A maintainer may need to approve normal PR-triggered workflows, including CI and native Quality. Don't bypass required checks. |
-| Candidate verification fails | Inspect the host logs. The pinned host executes Python unittest; a dependency-heavy or different-language project is not supported by this installer. Don't swap in an agent-supplied verification command. |
+If preview refuses an existing output directory, choose a fresh one. If the target is stale or dirty, inspect and resolve your local work and update the branch. If a branch was created but publication failed, inspect the existing local and remote branch and any PR before continuing; do not blindly retry or force-push.
+
+For run failures, see [Troubleshooting](how-to/troubleshooting.md). For current permissions and verification limits, see [Configuration](reference/configuration.md).
 
 ## Other languages and custom checks
 
-The current Factory verifier selects its trusted checks from the **reviewed
-Factory-host policy** (`integrations/github/checks.json` at the pinned Factory
-revision). The thin target caller cannot override those commands through an
-issue, label or workflow input. This is deliberate: otherwise untrusted issue
-text could remove tests or change what "verified" means. The present host also
-has an exact-file scope limit.
-
-To support another language, test runner, dependencies or source tree, make a
-**separate reviewable Factory change** that introduces a trusted
-project-specific verification profile and file policy. Qualify its real
-positive/negative tests, update the target's immutable Factory pins through a
-normal installation upgrade PR, then run a small authorized pilot. Never
-pretend that copying the workflows alone validates an arbitrary project.
+A separate reviewed Factory policy and verification profile is required for additional languages, test runners, dependencies or source paths. An issue cannot choose arbitrary check commands.
 
 ## What the installer never does
 
-It never edits GitHub secrets, repository Actions permissions, required checks
-or branch-protection rules. It never auto-labels an issue, invokes Copilot,
-executes target code, bypasses CI, approves or merges a PR, or sends credentials
-to an issue or untrusted PR. Only the explicit `--create-pr` flag performs
-ordinary Git and GitHub CLI writes to create a **reviewable installation PR**.
-Normal CI/Quality may run when that PR is opened if your repository already
-has such workflows; review their cost policy. The default preview is offline.
+It never executes target code, calls Copilot, changes permissions/secrets/branch rules, applies issue labels, approves or merges. Only `--create-pr` writes to GitHub to propose the installation; ordinary PR checks may run under the target's existing cost policy.
 
-For deeper architecture and migration details, see
-[Factory installation](installation.md),
-[Software Factory operations](how-to/run-software-factory.md), and
-[label-based authorization](how-to/issue-label-software-factory.md).
+[Back to documentation](README.md).
+
+## Archived sections
+
+Historical sections from the previous guide remain available at the immutable revision below. They may describe obsolete workflows or settings.
+
+<a id="first-exercise-deliberate-paid-planning-then-separately-authorized-paid-build"></a>
+- [First exercise: deliberate paid planning, then separately authorized paid build](https://github.com/grove/factory/blob/e7045bc934f504bebf1a6d06b0871fbcce1165b5/docs/getting-started-new-repository.md#first-exercise-deliberate-paid-planning-then-separately-authorized-paid-build)
