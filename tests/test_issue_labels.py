@@ -1,4 +1,4 @@
-"""No-AI checks for label-event authority, exact plan scope and one-shot claims."""
+"""No-model tests for labeled authorization, isolated advisory plans and claims."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from integrations.github import issue_labels
+from integrations.github import issue_labels, plan_advice
 
 BASE = "a" * 40
 BODY = """## Exact permitted scope
@@ -96,6 +96,25 @@ class IssueLabelTests(unittest.TestCase):
         self.api.issue["labels"].append({"name": "factory:run"})
         self.write_event()
 
+    def fake_ai(self):
+        proposal = {
+            "version": 1,
+            "steps": [
+                {"file": "examples/answer.py",
+                 "action": "Inspect the answer computation and repair the specific incorrect return value."},
+                {"file": "tests/test_answer.py",
+                 "action": "Introduce a new unittest assertion that detects the original wrong answer."},
+            ],
+            "verification": [
+                {"criterion": 1, "method": "Run tests/test_answer.py against the unchanged base for real RED, then repaired GREEN."},
+                {"criterion": 2, "method": "Run the exact tests/test_answer.py GREEN regression and full unittest discovery."},
+            ],
+            "risks": ["The test may accidentally assert the implementation rather than observable behavior."],
+            "questions": [],
+        }
+        issue_labels.publish_ai_plan(self.api, self.context, json.dumps(proposal))
+        return proposal
+
     def test_plan_only_previews_then_one_exact_paid_run_claim(self):
         preview = issue_labels.approve_label(self.api, self.context)
         self.assertFalse(preview["run"])
@@ -103,19 +122,30 @@ class IssueLabelTests(unittest.TestCase):
         self.assertEqual("defect", preview["plan"]["repair_mode"])
         self.assertEqual("tests/test_answer.py", preview["plan"]["regression_file"])
         self.assertEqual(1, len(self.api.posts))
+        self.fake_ai()
+        self.assertEqual(2, len(self.api.posts))
         self.mark_run()
         approved = issue_labels.approve_label(self.api, self.context)
         self.assertTrue(approved["run"])
         self.assertEqual(preview["plan"], approved["plan"])
-        self.assertEqual(2, len(self.api.posts))
-        self.assertEqual(approved["plan"], issue_labels.verify_claim(self.api, self.context, "maintainer"))
+        self.assertEqual(3, len(self.api.posts))
+        verified = issue_labels.verify_claim(self.api, self.context, "maintainer")
+        self.assertEqual(approved["plan"], {k: v for k, v in verified.items()
+                           if k not in {"advisory_plan", "ai_plan_sha256"}})
+        self.assertEqual(self.fake_proposal_digest(), verified["ai_plan_sha256"])
         with self.assertRaisesRegex(ValueError, "already has a durable Factory run claim"):
             issue_labels.approve_label(self.api, self.context)
-        self.assertEqual(2, len(self.api.posts))
+        self.assertEqual(3, len(self.api.posts))
+
+    def fake_proposal_digest(self):
+        record = issue_labels.current_ai_plan(self.api, self.context["repository"],
+                                              issue_labels.parse_plan(self.api.issue, self.context["repository"], BASE))
+        return record["digest"]
 
     def test_software_host_requires_and_preserves_the_exact_label_claim(self):
         from integrations.github import software
         issue_labels.approve_label(self.api, self.context)
+        self.fake_ai()
         self.mark_run()
         with self.assertRaisesRegex(ValueError, "unique, unchanged trusted Factory authorization"):
             software.SoftwareHost(self.api, self.context).admitted()
@@ -123,7 +153,9 @@ class IssueLabelTests(unittest.TestCase):
         host = software.SoftwareHost(self.api, self.context)
         repository, source, actor = host.admitted()
         self.assertEqual("maintainer", actor)
-        self.assertEqual(claimed["plan"], host.label_plan)
+        self.assertEqual(claimed["plan"], {k: v for k, v in host.label_plan.items()
+                         if k not in {"advisory_plan", "ai_plan_sha256"}})
+        self.assertEqual(self.fake_proposal_digest(), host.label_plan["ai_plan_sha256"])
         self.assertEqual("main", repository["default_branch"])
         with self.assertRaisesRegex(ValueError, "Label run parameters differ"):
             host.prepare(Path(self.tmp.name), 7, ["README.md"],
@@ -180,6 +212,7 @@ class IssueLabelTests(unittest.TestCase):
 
     def test_claim_must_be_from_github_bot(self):
         issue_labels.approve_label(self.api, self.context)
+        self.fake_ai()
         self.mark_run()
         issue_labels.approve_label(self.api, self.context)
         self.api.comments[-1]["user"] = {"login": "untrusted-user", "type": "User"}
@@ -188,6 +221,7 @@ class IssueLabelTests(unittest.TestCase):
 
     def test_claim_cannot_be_reused_by_another_run_or_actor(self):
         issue_labels.approve_label(self.api, self.context)
+        self.fake_ai()
         self.mark_run()
         issue_labels.approve_label(self.api, self.context)
         with self.assertRaisesRegex(ValueError, "Only the approved factory:run label"):
@@ -195,6 +229,45 @@ class IssueLabelTests(unittest.TestCase):
         self.context["run_id"] = "1235"
         with self.assertRaises(ValueError):
             issue_labels.verify_claim(self.api, self.context, "maintainer")
+
+    def test_plan_requires_fresh_model_output_and_is_not_free(self):
+        preview = issue_labels.approve_label(self.api, self.context)
+        self.assertTrue(preview["plan_requested"])
+        with self.assertRaisesRegex(ValueError, "already planned"):
+            issue_labels.approve_label(self.api, self.context)
+        self.mark_run()
+        with self.assertRaisesRegex(ValueError, "Missing or ambiguous validated AI plan"):
+            issue_labels.approve_label(self.api, self.context)
+        self.assertEqual(1, len(self.api.posts))
+
+    def test_bad_ai_scope_and_missing_verification_do_not_publish(self):
+        issue_labels.approve_label(self.api, self.context)
+        original = self.fake_ai()
+        self.assertEqual(2, len(self.api.posts))
+        for failure in (
+            {**original, "steps": [{**original["steps"][0], "file": "integrations/github/automation.py"},
+                                   original["steps"][1]]},
+            {**original, "verification": original["verification"][:1]},
+            {**original, "risks": []},
+            {**original, "verification": [
+                {"criterion": 1, "method": self.api.issue["body"].splitlines()[4]},
+                original["verification"][1]]},
+        ):
+            with self.subTest(failure=failure), self.assertRaises(ValueError):
+                plan_advice.validate(json.dumps(failure), issue_labels.parse_plan(
+                    self.api.issue, self.context["repository"], BASE))
+        with self.assertRaisesRegex(ValueError, "already published"):
+            issue_labels.publish_ai_plan(self.api, self.context, json.dumps(original))
+        self.assertEqual(2, len(self.api.posts))
+
+    def test_ai_plan_human_visible_tampering_or_changed_issue_blocks_run(self):
+        issue_labels.approve_label(self.api, self.context)
+        self.fake_ai()
+        self.mark_run()
+        self.api.comments[-1]["body"] += "\nMalicious new instruction."
+        with self.assertRaisesRegex(ValueError, "Human-visible planning comment"):
+            issue_labels.approve_label(self.api, self.context)
+        self.assertEqual(2, len(self.api.posts))
 
     def test_path_scope_and_criteria_are_fail_closed(self):
         for body in (
