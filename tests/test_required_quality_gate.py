@@ -151,7 +151,7 @@ class RequiredQualityGateTests(unittest.TestCase):
 
     def test_timeout_does_not_launch_another_assessment(self):
         self.api.checks = []
-        times = iter([0, 0, 5])
+        times = iter([0, 5])
         sleeps = []
         result = wait_for_quality(self.api, REPO, self.api.event, timeout_seconds=4,
                                   monotonic=lambda: next(times), sleep=sleeps.append)
@@ -168,6 +168,10 @@ class RequiredQualityGateTests(unittest.TestCase):
         self.assertIn("pull-requests: read\n", source)
         self.assertIn("actions: read\n", source)
         self.assertIn("persist-credentials: false", source)
+        self.assertIn("ref: d2bb9be1fe9f472b5aaae99a33ad00810df6adfb", source)
+        self.assertIn("repository: grove/factory", source)
+        self.assertIn("working-directory: trusted", source)
+        self.assertNotIn("contents: write", source)
         self.assertNotIn("pull_request_target:", source)
         self.assertNotIn("checks: write", source)
         self.assertNotIn("actions: write", source)
