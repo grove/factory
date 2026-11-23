@@ -193,6 +193,30 @@ class IssueLabelTests(unittest.TestCase):
             issue_labels.approve_label(self.api, self.context)
         self.assertEqual(1, len(self.api.posts))
 
+    def test_direct_host_rejects_injected_ai_advice_or_digest(self):
+        from integrations.github import software
+        self.mark_direct_run()
+        authorized = issue_labels.approve_label(self.api, self.context)
+        plan = authorized["plan"]
+        target = {
+            "issue": software.issue_snapshot(self.api.issue, self.context["repository"]),
+            "allowed_files": {path: {} for path in plan["allowed_paths"]},
+            "criteria": software.criteria(plan["acceptance_criteria"]),
+            "mode": plan["repair_mode"], "regression_file": plan["regression_file"],
+            "actor": "maintainer", "repository": self.context["repository"],
+            "run_id": self.context["run_id"], "run_attempt": self.context["run_attempt"],
+            "base_sha": BASE, "base_branch": "main",
+        }
+        host = software.SoftwareHost(self.api, self.context)
+        host.current(target)
+        target["advisory_plan"] = {"invented": "AI approval"}
+        with self.assertRaisesRegex(ValueError, "outside the claimed label plan"):
+            host.current(target)
+        target.pop("advisory_plan")
+        target["ai_plan_sha256"] = "f" * 64
+        with self.assertRaisesRegex(ValueError, "outside the claimed label plan"):
+            host.current(target)
+
     def test_direct_run_refuses_existing_plan_label_without_publication(self):
         # An in-flight or failed factory:plan label is not permission to
         # silently skip paid planning and start implementation.
@@ -259,7 +283,7 @@ class IssueLabelTests(unittest.TestCase):
             issue_labels.approve_label(self.api, self.context)
         self.api.permission = "write"
         self.context["run_attempt"] = "2"
-        with self.assertRaisesRegex(ValueError, "first issue event attempt"):
+        with self.assertRaisesRegex(ValueError, "current run attempt"):
             issue_labels.approve_label(self.api, self.context)
         self.assertFalse(self.api.posts)
 
