@@ -210,8 +210,9 @@ First-time readers need a short, accurate setup explanation.
    and the change satisfies your issue. Check post-merge CI and close the issue.
 
 **No automatic reruns:** editing the issue or advancing the default branch
-invalidates the plan. Remove/reapply `factory:plan` and review the new
-preview; do **not** simply relabel `factory:run`. Once a run is claimed, its
+invalidates the plan. Remove/reapply `factory:plan` only if you explicitly
+authorize another paid planning call for the changed scope/base, then review
+the new AI proposal; do **not** simply relabel `factory:run`. Once a run is claimed, its
 claim is permanent and relabeling cannot buy another build. Inspect existing
 PR, check and Actions identities, then open a separately authorized follow-up
 issue if needed. See [label troubleshooting](how-to/issue-label-software-factory.md)
@@ -226,6 +227,7 @@ model calls:
 python ~/factory/tools/onboard_repository.py \
   --repository YOURORG/YOURREPO \
   --default-branch main \
+  --factory-revision "$FACTORY_REVISION" \
   --output /tmp/factory-install-review-001
 ```
 
