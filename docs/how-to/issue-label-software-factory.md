@@ -122,3 +122,10 @@ PR/check/Actions write permissions.
   before model activation is **not** silently retried.
 - This is GitHub Actions isolation, not a hostile-code sandbox, cryptographic
   host attestation or a network-outage guarantee.
+
+## Read-only run diagnostics
+
+Use the [Factory run summary](inspect-factory-run.md) to inspect an existing
+label-event attempt, measured jobs, retained evidence, independent Quality,
+published agent usage, and safe recovery hints without another paid AI call.
+It is a diagnostic, never an approval or a reason to retry a claimed build.
