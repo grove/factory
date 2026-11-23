@@ -1,0 +1,43 @@
+{
+  "attempt": "1",
+  "base_sha": "32b58d7af36b03f9a735e5f86586a68f6f920e0f",
+  "branch": "sfstack/issue-9-45144342739-1",
+  "candidate_sha": "414dce97f93721d6f789adbf88dfc0ce121cb848",
+  "draft_closed_unmerged": true,
+  "evidence_digests": {
+    "candidate.json": "d9ae74dab39b8a22cc700936af8b5597f600241573fc1f36ad4acfb18f66f46c",
+    "change-set.json": "9649829729e80bbf2b5af316d3e70ca0e67f646cca40cd882a0bea01773147f9",
+    "diff.patch": "69b3faee44a14f1f908e9276c225c93d3d8171ce81667ce5650081f8e98d39bb",
+    "proposal.json": "7bb4cffe56b5e00a5836ba4a41307f918ba813040524fb3b9cffcdfcc19a139d",
+    "submission.json": "1b284879539f402f9f6ac55346a296f6499415b00b555dc8800824adec0440fa",
+    "verification-report.json": "3edade44c7f8b0ab710e3fbb29ad69c8a9a0696c8168207c04cf2e921a1a91c4"
+  },
+  "fault": "Discard client response only after REAL GitHub ACK.",
+  "first_attempt": "fail-closed on uncertain dispatch",
+  "issue": 9,
+  "merge_authorized": false,
+  "model_invoked": false,
+  "no_ai_run": 45144866988,
+  "no_ai_run_conclusion": "success",
+  "observed_inflight": true,
+  "passed": true,
+  "physical_network_partition": false,
+  "post_counts": {
+    "/actions/workflows/sfstack-recovery-noai.yml/dispatches": 1,
+    "/check-runs": 1,
+    "/git/refs": 1,
+    "/pulls": 1
+  },
+  "pull_request": 11,
+  "replay": {
+    "draft": true,
+    "merge_authorized": false,
+    "published": true,
+    "quality_reconciled": true,
+    "quality_requested": true
+  },
+  "reserved_check": 137591493355,
+  "run_id": "45144342739",
+  "source": "grove/factory",
+  "synthetic_quality_check": "failure"
+}
