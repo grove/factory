@@ -35,6 +35,9 @@ unreviewed PR or a branch supplied by issue text.
 ```sh
 # 1. Obtain and review the Factory source in a separate directory.
 git clone https://github.com/grove/factory.git ~/factory
+# Only after reviewing the current Factory release:
+FACTORY_REVISION="$(git -C ~/factory rev-parse HEAD)"
+# Pin the full immutable revision; never choose a mutable branch in the caller.
 
 # 2. Clone YOUR GitHub repo and update its default branch.
 gh repo clone YOURORG/YOURREPO ~/yourrepo
@@ -44,7 +47,8 @@ git -C ~/yourrepo pull --ff-only origin main
 # 3. Preview the files and SHA-256 hashes: this does NOT write anything.
 python ~/factory/tools/onboard_repository.py \
   --repository YOURORG/YOURREPO \
-  --default-branch main
+  --default-branch main \
+  --factory-revision "$FACTORY_REVISION"
 
 # 4. Explicitly request a reviewable installation PR in YOUR repo.
 # This checks a clean checkout, target identity, test inventory and current base;
@@ -53,6 +57,7 @@ python ~/factory/tools/onboard_repository.py \
 python ~/factory/tools/onboard_repository.py \
   --repository YOURORG/YOURREPO \
   --default-branch main \
+  --factory-revision "$FACTORY_REVISION" \
   --checkout ~/yourrepo \
   --create-pr
 ```
@@ -62,7 +67,10 @@ branch. Before step 4, review the pinned Factory source and ensure that your
 project satisfies the [prerequisites](#before-you-begin). If you use a branch
 other than `main`, supply its exact name (for example, `release/v2`). The
 installer binds the label guard to your repository and the Quality event filter
-to your branch, preserving the source workflow names and immutable pins.
+to your branch. It requires a reviewed exact `--factory-revision`, because the
+new label workflow must use the same immutable Factory commit for its coordinator
+and paid AI planning path. Never use `@main` or an unreviewed commit. The Quality
+event workflows retain their separately reviewed matching SHA pins.
 
 The tool does not automatically clone Factory dependencies, run target code,
 call Copilot, or contact GitHub during a preview. **Only** `--create-pr` uses
