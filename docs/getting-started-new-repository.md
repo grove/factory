@@ -7,11 +7,12 @@ your issues, pull requests, credentials, logs, verification runs, and checks sta
 in **your** repository. There is no server, cross-repository credential, or
 automatic merge service to provision.
 
-**What you will have:** write an issue using an issue template, apply
-`factory:plan` to request a paid, read-only Copilot implementation plan, and (after reviewing it) apply
-`factory:run` once to authorize a paid Copilot build. Independently verified
-output becomes a *draft PR*, then receives separate Quality and ordinary CI.
-**You** review and decide whether to merge.
+**What you will have:** write a bounded issue using an issue template and
+apply `factory:run` once to authorize a paid Copilot build **directly**, or
+first apply optional paid `factory:plan` to review a separate read-only
+AI implementation proposal before choosing to build. Either route produces
+independently verified output as a *draft PR*, with separate Quality and
+ordinary CI. **You** review and decide whether to merge.
 
 **Important limitation:** this first installer supports only the reviewed
 **Python-unittest pilot profile**. Its pinned Factory host runs
@@ -118,7 +119,7 @@ Your PR will propose exactly **seven** files:
 
 | File | Purpose |
 | --- | --- |
-| `.github/workflows/sfstack-issue-label.yml` | Receive `issues:labeled`, authenticate a human writer, prepare immutable scope, run isolated billable AI planning, post a verified plan and accept a separate one-shot implementation claim |
+| `.github/workflows/sfstack-issue-label.yml` | Receive `issues:labeled`, authenticate a human writer, make a one-shot direct build claim **or** optional isolated paid AI planning followed by a verified plan and separate build claim |
 | `.github/workflows/sfstack-software.yml` | Preserve the manual issue-to-draft fallback |
 | `.github/workflows/sfstack-quality.yml` | Receive trusted manual/automatic Quality dispatch and call pinned Quality Factory |
 | `.github/workflows/sfstack-pr-signal.yml` | Emit a zero-token PR event signal |
@@ -173,6 +174,13 @@ through ordinary protected-branch review. The tool never approves or merges.
    whether the workflow is visible.
 
 ## First exercise: deliberate paid planning, then separately authorized paid build
+
+This example chooses the **optional paid planning route** to demonstrate both
+authorizations. For a straightforward, sufficiently detailed issue, a writer
+may instead apply `factory:run` directly, skipping separate paid planning.
+The bot posts a durable exact-scope direct-run claim before the builder starts.
+Do not use this shortcut after a `factory:plan` request, even if that
+planning attempt failed. See [both modes and guardrails](how-to/issue-label-software-factory.md).
 
 Create an open issue using **Software Factory work item**, for example:
 
@@ -247,7 +255,7 @@ bundle, not a required target workflow or secret. Never copy the sample
 | Installer refuses an existing caller file | It found a partial/current Factory installation. Treat it as an upgrade requiring a new human-reviewed diff; don't overwrite silently. |
 | Installer says the target is stale or dirty | Commit/remove your own local work, update the exact default branch and retry **only after inspecting the current checkout**. |
 | Installer created a branch but the push or `gh pr create` failed | Do not blindly rerun. Inspect the local branch, GitHub's remote branch and any existing installation PR; continue the interrupted PR operation manually without force-pushing. No paid build is dispatched by the installer. |
-| No AI plan comment | Confirm the label and human writer, inspect the issue-label Actions jobs and Copilot access. The first scope snapshot is not approval. Do not apply `factory:run` until validated model advice is published. |
+| No AI plan comment **after** `factory:plan` | Inspect the planning Jobs and Copilot access. The first scope snapshot is not approval. If planning was requested, do not apply `factory:run` until validated model advice is published; direct builds never require an AI plan comment. |
 | `factory:run` rejected as stale | Issue text or base changed after planning; reapply `factory:plan` and review the new preview before any new authorization. |
 | A durable claim exists | Never delete the bot claim comment or reapply `factory:run` to restart; reconcile its original run/PR/check instead. |
 | PR is blocked in `action_required` | A maintainer may need to approve normal PR-triggered workflows, including CI and native Quality. Don't bypass required checks. |
