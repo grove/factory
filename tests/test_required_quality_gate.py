@@ -288,7 +288,7 @@ class RequiredQualityGateTests(unittest.TestCase):
         self.assertIn("pull-requests: read\n", source)
         self.assertIn("actions: read\n", source)
         self.assertIn("persist-credentials: false", source)
-        self.assertIn("ref: d2bb9be1fe9f472b5aaae99a33ad00810df6adfb", source)
+        self.assertIn("ref: 3982085ba70d782ae51aad03e126001002161bc5", source)
         self.assertIn("repository: grove/factory", source)
         self.assertIn("working-directory: trusted", source)
         self.assertNotIn("contents: write", source)
