@@ -44,8 +44,18 @@ class OnboardRepositoryTests(unittest.TestCase):
                 self.assertNotIn(onboarding.BRANCH_TOKEN, content)
                 for target in re.findall(r"uses:\s*grove/factory/\.github/workflows/[^\s@]+@([^\s]+)", content):
                     self.assertRegex(target, r"\A[a-f0-9]{40}\Z")
-                self.assertNotIn("@main", content)
-                self.assertNotIn("@latest", content)
+                # Comments may explain why @main/@latest are unsafe. Validate
+                # actual action references, not those explanatory words.
+                references = re.findall(
+                    r"(?m)^[ \t]*(?:-[ \t]*)?uses:[ \t]*([^ \t\r\n#]+)", content,
+                )
+                for reference in references:
+                    with self.subTest(name=name, reference=reference):
+                        self.assertRegex(
+                            reference,
+                            r"\A[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+@[a-f0-9]{40}\Z",
+                        )
+
 
     def test_custom_default_branch_is_escaped_and_exact(self):
         files = onboarding.render("another/target-repo", "release/v2")
