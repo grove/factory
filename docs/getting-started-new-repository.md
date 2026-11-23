@@ -8,7 +8,7 @@ in **your** repository. There is no server, cross-repository credential, or
 automatic merge service to provision.
 
 **What you will have:** write an issue using an issue template, apply
-`factory:plan` to get a no-AI preview, and (after reviewing it) apply
+`factory:plan` to request a paid, read-only Copilot implementation plan, and (after reviewing it) apply
 `factory:run` once to authorize a paid Copilot build. Independently verified
 output becomes a *draft PR*, then receives separate Quality and ordinary CI.
 **You** review and decide whether to merge.
@@ -35,6 +35,9 @@ unreviewed PR or a branch supplied by issue text.
 ```sh
 # 1. Obtain and review the Factory source in a separate directory.
 git clone https://github.com/grove/factory.git ~/factory
+# Only after reviewing the current Factory release:
+FACTORY_REVISION="$(git -C ~/factory rev-parse HEAD)"
+# Pin the full immutable revision; never choose a mutable branch in the caller.
 
 # 2. Clone YOUR GitHub repo and update its default branch.
 gh repo clone YOURORG/YOURREPO ~/yourrepo
@@ -44,7 +47,8 @@ git -C ~/yourrepo pull --ff-only origin main
 # 3. Preview the files and SHA-256 hashes: this does NOT write anything.
 python ~/factory/tools/onboard_repository.py \
   --repository YOURORG/YOURREPO \
-  --default-branch main
+  --default-branch main \
+  --factory-revision "$FACTORY_REVISION"
 
 # 4. Explicitly request a reviewable installation PR in YOUR repo.
 # This checks a clean checkout, target identity, test inventory and current base;
@@ -53,6 +57,7 @@ python ~/factory/tools/onboard_repository.py \
 python ~/factory/tools/onboard_repository.py \
   --repository YOURORG/YOURREPO \
   --default-branch main \
+  --factory-revision "$FACTORY_REVISION" \
   --checkout ~/yourrepo \
   --create-pr
 ```
@@ -62,7 +67,10 @@ branch. Before step 4, review the pinned Factory source and ensure that your
 project satisfies the [prerequisites](#before-you-begin). If you use a branch
 other than `main`, supply its exact name (for example, `release/v2`). The
 installer binds the label guard to your repository and the Quality event filter
-to your branch, preserving the source workflow names and immutable pins.
+to your branch. It requires a reviewed exact `--factory-revision`, because the
+new label workflow must use the same immutable Factory commit for its coordinator
+and paid AI planning path. Never use `@main` or an unreviewed commit. The Quality
+event workflows retain their separately reviewed matching SHA pins.
 
 The tool does not automatically clone Factory dependencies, run target code,
 call Copilot, or contact GitHub during a preview. **Only** `--create-pr` uses
@@ -110,7 +118,7 @@ Your PR will propose exactly **seven** files:
 
 | File | Purpose |
 | --- | --- |
-| `.github/workflows/sfstack-issue-label.yml` | Receive `issues:labeled`, authenticate the actual writer, post a no-AI plan or one-shot claim and call the pinned Software Factory |
+| `.github/workflows/sfstack-issue-label.yml` | Receive `issues:labeled`, authenticate a human writer, prepare immutable scope, run isolated billable AI planning, post a verified plan and accept a separate one-shot implementation claim |
 | `.github/workflows/sfstack-software.yml` | Preserve the manual issue-to-draft fallback |
 | `.github/workflows/sfstack-quality.yml` | Receive trusted manual/automatic Quality dispatch and call pinned Quality Factory |
 | `.github/workflows/sfstack-pr-signal.yml` | Emit a zero-token PR event signal |
@@ -164,7 +172,7 @@ through ordinary protected-branch review. The tool never approves or merges.
    CI passes there. Never manually launch a production build merely to see
    whether the workflow is visible.
 
-## First exercise: free plan, then deliberate paid build
+## First exercise: deliberate paid planning, then separately authorized paid build
 
 Create an open issue using **Software Factory work item**, for example:
 
@@ -182,9 +190,13 @@ First-time readers need a short, accurate setup explanation.
 2. Explain how to confirm the project tests pass.
 ```
 
-1. Apply `factory:plan` **as a human with write permission**. Open the
-   `sfstack issue-label Software Factory` run under Actions and read the
-   bot-authored plan comment. This step executes **no model** and does not
+1. Apply `factory:plan` **as a human with write permission**. This explicitly
+   authorizes a **paid Copilot planning call** but no implementation. In the
+   `sfstack issue-label Software Factory` Actions run, expect **two** bot
+   comments: first an exact deterministic authorization snapshot; second
+   a proposed implementation plan with concrete file-level work, independent
+   verification, risks and questions. The planning job cannot execute or
+   publish source code. It does not
    create a PR. Confirm exact files, criteria, mode and pinned base.
 2. Only if you want to spend Copilot usage, add `factory:run` **once**, as a
    writer. The trusted handler makes a durable one-shot claim and starts the
@@ -198,8 +210,9 @@ First-time readers need a short, accurate setup explanation.
    and the change satisfies your issue. Check post-merge CI and close the issue.
 
 **No automatic reruns:** editing the issue or advancing the default branch
-invalidates the plan. Remove/reapply `factory:plan` and review the new
-preview; do **not** simply relabel `factory:run`. Once a run is claimed, its
+invalidates the plan. Remove/reapply `factory:plan` only if you explicitly
+authorize another paid planning call for the changed scope/base, then review
+the new AI proposal; do **not** simply relabel `factory:run`. Once a run is claimed, its
 claim is permanent and relabeling cannot buy another build. Inspect existing
 PR, check and Actions identities, then open a separately authorized follow-up
 issue if needed. See [label troubleshooting](how-to/issue-label-software-factory.md)
@@ -214,6 +227,7 @@ model calls:
 python ~/factory/tools/onboard_repository.py \
   --repository YOURORG/YOURREPO \
   --default-branch main \
+  --factory-revision "$FACTORY_REVISION" \
   --output /tmp/factory-install-review-001
 ```
 
@@ -233,7 +247,7 @@ bundle, not a required target workflow or secret. Never copy the sample
 | Installer refuses an existing caller file | It found a partial/current Factory installation. Treat it as an upgrade requiring a new human-reviewed diff; don't overwrite silently. |
 | Installer says the target is stale or dirty | Commit/remove your own local work, update the exact default branch and retry **only after inspecting the current checkout**. |
 | Installer created a branch but the push or `gh pr create` failed | Do not blindly rerun. Inspect the local branch, GitHub's remote branch and any existing installation PR; continue the interrupted PR operation manually without force-pushing. No paid build is dispatched by the installer. |
-| No plan comment | Confirm the labels and actual human writer, then inspect the issue-label Actions run; planning is no-model. |
+| No AI plan comment | Confirm the label and human writer, inspect the issue-label Actions jobs and Copilot access. The first scope snapshot is not approval. Do not apply `factory:run` until validated model advice is published. |
 | `factory:run` rejected as stale | Issue text or base changed after planning; reapply `factory:plan` and review the new preview before any new authorization. |
 | A durable claim exists | Never delete the bot claim comment or reapply `factory:run` to restart; reconcile its original run/PR/check instead. |
 | PR is blocked in `action_required` | A maintainer may need to approve normal PR-triggered workflows, including CI and native Quality. Don't bypass required checks. |

@@ -29,6 +29,7 @@ BRANCH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,126}\Z")
 PR_BRANCH = "chore/install-sfstack-factory"
 REPO_TOKEN = "__SFSTACK_TARGET_REPOSITORY__"
 BRANCH_TOKEN = "__SFSTACK_TARGET_BRANCH_JSON__"
+PLAN_SHA_TOKEN = "__SFSTACK_FACTORY_PLAN_SHA__"
 SHA = re.compile(r"[a-f0-9]{40}\Z")
 
 
@@ -44,9 +45,11 @@ def validate_identity(repository, default_branch):
         raise InstallationError("Unsupported default branch name; select a safe exact branch ref.")
 
 
-def render(repository, default_branch):
+def render(repository, default_branch, factory_revision):
     """Render only reviewed, fixed-path templates; never interpret issue text."""
     validate_identity(repository, default_branch)
+    if not SHA.fullmatch(factory_revision):
+        raise InstallationError("Choose an exact reviewed 40-character Factory SHA with --factory-revision.")
     result = {}
     for name in FILES:
         template = TEMPLATE_ROOT / name
@@ -55,10 +58,15 @@ def render(repository, default_branch):
         content = template.read_text(encoding="utf-8")
         expected_repo = int(name.endswith("sfstack-issue-label.yml"))
         expected_branch = int(name.endswith("sfstack-quality-events.yml"))
-        if content.count(REPO_TOKEN) != expected_repo or content.count(BRANCH_TOKEN) != expected_branch:
+        expected_plan_sha = 3 if name.endswith("sfstack-issue-label.yml") else 0
+        if (content.count(REPO_TOKEN) != expected_repo
+                or content.count(BRANCH_TOKEN) != expected_branch
+                or content.count(PLAN_SHA_TOKEN) != expected_plan_sha):
             raise InstallationError("Unexpected template placeholder layout: " + name)
-        content = content.replace(REPO_TOKEN, repository).replace(BRANCH_TOKEN, json.dumps(default_branch))
-        if REPO_TOKEN in content or BRANCH_TOKEN in content:
+        content = (content.replace(REPO_TOKEN, repository)
+                   .replace(BRANCH_TOKEN, json.dumps(default_branch))
+                   .replace(PLAN_SHA_TOKEN, factory_revision))
+        if REPO_TOKEN in content or BRANCH_TOKEN in content or PLAN_SHA_TOKEN in content:
             raise InstallationError("An installation template still contains a placeholder.")
         result[name] = content
     # Every reusable Factory workflow or source checkout is pinned to an exact
@@ -196,6 +204,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository", required=True, help="Exact GitHub OWNER/NAME")
     parser.add_argument("--default-branch", default="main", help="Target's protected default branch")
+    parser.add_argument("--factory-revision", required=True,
+                        help="Full reviewed immutable Factory SHA that includes AI planning support")
     parser.add_argument("--profile", default="python-unittest", choices=["python-unittest"])
     parser.add_argument("--output", type=Path, help="Write a new offline bundle (no GitHub writes)")
     parser.add_argument("--checkout", type=Path, help="Existing clean checkout; required for --create-pr")
@@ -206,8 +216,9 @@ def main(argv=None):
     if args.create_pr and not args.checkout:
         parser.error("--create-pr requires --checkout to an existing GitHub clone.")
     try:
-        files = render(args.repository, args.default_branch)
+        files = render(args.repository, args.default_branch, args.factory_revision)
         result = manifest(args.repository, args.default_branch, files)
+        result["factory_planning_revision"] = args.factory_revision
         if args.create_pr:
             result["pr_url"] = open_installation_pr(args.checkout, args.repository, args.default_branch, files)
         elif args.output:

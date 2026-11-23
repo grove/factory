@@ -15,7 +15,7 @@ versioned `sfstack-contract` CLI; it does not import sfstack's private modules.
 
 ## Start here
 
-- **[Getting started: install in another GitHub repository](docs/getting-started-new-repository.md)** — guided, SHA-pinned caller installation, no-AI preview, explicit target PR, setup checklist and safety limits.
+- **[Getting started: install in another GitHub repository](docs/getting-started-new-repository.md)** — guided, SHA-pinned caller installation, offline no-AI installer preview, explicit target PR, setup checklist and safety limits.
 - [Install and validate the host](docs/installation.md), including manual cross-repository Quality reuse.
 - [Assess an existing pull request](docs/how-to/run-github.md).
 - [Build a bounded change or reproduce and repair a defect](docs/how-to/run-software-factory.md).

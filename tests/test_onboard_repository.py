@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 import onboard_repository as onboarding
 
+FACTORY_REVISION = "a" * 40
+
 
 class OnboardRepositoryTests(unittest.TestCase):
     def setUp(self):
@@ -24,7 +26,7 @@ class OnboardRepositoryTests(unittest.TestCase):
         self.root = Path(temporary.name)
 
     def test_all_seven_reviewed_files_render_without_mutable_controller_refs(self):
-        files = onboarding.render("Example/target", "main")
+        files = onboarding.render("Example/target", "main", FACTORY_REVISION)
         self.assertEqual(set(onboarding.FILES), set(files))
         label = files[".github/workflows/sfstack-issue-label.yml"]
         self.assertIn("github.repository == 'Example/target'", label)
@@ -57,8 +59,19 @@ class OnboardRepositoryTests(unittest.TestCase):
                         )
 
 
+    def test_factory_revision_is_mandatory_full_sha_and_used_only_for_planning(self):
+        for revision in ("", "main", "deadbeef", "a" * 39 + "z"):
+            with self.subTest(revision=revision), self.assertRaises(onboarding.InstallationError):
+                onboarding.render("example/repo", "main", revision)
+        files = onboarding.render("example/repo", "main", FACTORY_REVISION)
+        label = files[".github/workflows/sfstack-issue-label.yml"]
+        self.assertEqual(3, label.count(FACTORY_REVISION))
+        self.assertNotIn(onboarding.PLAN_SHA_TOKEN, label)
+        self.assertIn("Generate actionable Copilot implementation proposal", label)
+        self.assertIn("Independently validate and publish", label)
+
     def test_custom_default_branch_is_escaped_and_exact(self):
-        files = onboarding.render("another/target-repo", "release/v2")
+        files = onboarding.render("another/target-repo", "release/v2", FACTORY_REVISION)
         self.assertIn('branches: ["release/v2"]', files[".github/workflows/sfstack-quality-events.yml"])
         self.assertIn("github.repository == 'another/target-repo'", files[".github/workflows/sfstack-issue-label.yml"])
         self.assertNotIn("branches: [main]", files[".github/workflows/sfstack-quality-events.yml"])
@@ -66,14 +79,14 @@ class OnboardRepositoryTests(unittest.TestCase):
     def test_repo_and_branch_injection_are_rejected(self):
         for repo in ("", "wrong", "../repo", "owner/../repo", "owner/repo'", "owner/repo\nother", "owner/r/extra"):
             with self.subTest(repo=repo), self.assertRaises(onboarding.InstallationError):
-                onboarding.render(repo, "main")
+                onboarding.render(repo, "main", FACTORY_REVISION)
         for branch in ("", "../main", "main..other", "bad]", "main\ninject", "release//v1", "x.lock"):
             with self.subTest(branch=branch), self.assertRaises(onboarding.InstallationError):
-                onboarding.render("owner/repo", branch)
+                onboarding.render("owner/repo", branch, FACTORY_REVISION)
 
     def test_output_bundle_is_new_and_byte_verified_without_network(self):
         target = self.root / "bundle"
-        files = onboarding.render("org/repo", "main")
+        files = onboarding.render("org/repo", "main", FACTORY_REVISION)
         metadata = onboarding.manifest("org/repo", "main", files)
         with patch.object(onboarding, "command", side_effect=AssertionError("Must not access GitHub")):
             onboarding.write_bundle(target, files, metadata)
@@ -91,7 +104,7 @@ class OnboardRepositoryTests(unittest.TestCase):
     def test_default_preview_never_writes_or_invokes_remote(self):
         output = io.StringIO()
         with patch.object(onboarding, "open_installation_pr", side_effect=AssertionError("No PR")), redirect_stdout(output):
-            self.assertEqual(0, onboarding.main(["--repository", "example/repo"]))
+            self.assertEqual(0, onboarding.main(["--repository", "example/repo", "--factory-revision", FACTORY_REVISION]))
         result = json.loads(output.getvalue())
         self.assertTrue(result["preview_only"])
         self.assertEqual(len(onboarding.FILES), len(result["files"]))
@@ -114,7 +127,7 @@ class OnboardRepositoryTests(unittest.TestCase):
 
     def test_pr_creation_requires_clean_exact_clone_and_does_not_overwrite(self):
         root = self.seed_checkout()
-        files = onboarding.render("example/repo", "main")
+        files = onboarding.render("example/repo", "main", FACTORY_REVISION)
         self.assertEqual(root, onboarding.prepare_target(root, "example/repo", "main", files))
         (root / "untracked.txt").write_text("unsafe")
         with self.assertRaisesRegex(onboarding.InstallationError, "clean"):
@@ -131,7 +144,7 @@ class OnboardRepositoryTests(unittest.TestCase):
 
     def test_explicit_create_pr_prepares_only_installation_files_without_merging(self):
         root = self.seed_checkout()
-        files = onboarding.render("example/repo", "main")
+        files = onboarding.render("example/repo", "main", FACTORY_REVISION)
         original = onboarding.command
         calls = []
         def simulate(args, cwd):
@@ -158,7 +171,7 @@ class OnboardRepositoryTests(unittest.TestCase):
 
     def test_no_tests_or_unsafe_remote_refuses_live_creation(self):
         root = self.seed_checkout()
-        files = onboarding.render("example/repo", "main")
+        files = onboarding.render("example/repo", "main", FACTORY_REVISION)
         (root / "tests/test_example.py").unlink()
         with self.assertRaisesRegex(onboarding.InstallationError, "clean"):
             onboarding.prepare_target(root, "example/repo", "main", files)

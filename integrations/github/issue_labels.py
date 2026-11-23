@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Maintainer-approved, one-shot issue-label handoff to Software Factory.
 
-Only the default-branch workflow reads an issue and posts a deterministic preview
-or durable claim. This module never runs a model, candidate or build command.
+The default-branch workflow authenticates immutable issue scope and records
+only human-authorized claims. An isolated Copilot job produces *advice*;
+only this trusted host validates/publishes it. No agent publishes or merges.
 """
 from __future__ import annotations
 
@@ -18,13 +19,14 @@ from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from integrations.github import automation
+from integrations.github import automation, plan_advice
 
 LABEL_WORKFLOW = "sfstack-issue-label.yml"
 PLAN_LABEL = "factory:plan"
 RUN_LABEL = "factory:run"
 PLAN_MARKER = "<!-- sfstack-label-plan-v1 "
 CLAIM_MARKER = "<!-- sfstack-label-claim-v1 "
+AI_PLAN_MARKER = "<!-- sfstack-ai-issue-plan-v1 "
 BOT_LOGIN = "github-actions[bot]"
 SCOPE_HEADINGS = frozenset({"allowed files", "files to change", "exact permitted scope", "factory scope"})
 CRITERIA_HEADINGS = frozenset({"acceptance criteria", "observable acceptance criteria"})
@@ -221,6 +223,65 @@ def publish_comment(api, repository, number, marker, data, message):
     return api.post(f"repos/{repository}/issues/{number}/comments", {"body": body})
 
 
+def ai_plan_records(api, repository, number):
+    """Only authentic bot comments are considered; human text cannot authorize."""
+    items = comments(api, repository, number)
+    found = []
+    for comment in items:
+        value = comment_type(comment, AI_PLAN_MARKER)
+        if value is None:
+            continue
+        if set(value) != {"version", "scope", "plan_run_id", "proposal", "digest"}:
+            raise ValueError("AI planning authorization metadata is malformed.")
+        scope = value["scope"]
+        if (not isinstance(scope, dict) or scope.get("version") != 1
+                or not automation.positive(value["plan_run_id"])
+                or not isinstance(value["digest"], str)
+                or len(value["digest"]) != 64):
+            raise ValueError("AI planning provenance is invalid.")
+        proposal = plan_advice.validate(plan_advice.canonical(value["proposal"]), scope)
+        if value["digest"] != plan_advice.digest(proposal):
+            raise ValueError("AI planning output digest changed.")
+        expected = (AI_PLAN_MARKER + base64.urlsafe_b64encode(canonical(value).encode("utf-8")).decode("ascii")
+                    + " -->\n\n" + plan_advice.display(scope, proposal, value["plan_run_id"]))
+        if comment.get("body") != expected:
+            raise ValueError("Human-visible planning comment differs from its approved JSON.")
+        found.append(value)
+    return found
+
+
+def current_ai_plan(api, repository, scope):
+    selected = [item for item in ai_plan_records(api, repository, scope["issue"])
+                if item["scope"] == scope]
+    if len(selected) != 1:
+        raise ValueError("Missing or ambiguous validated AI plan; factory:run cannot begin.")
+    return selected[0]
+
+
+def publish_ai_plan(api, context, response):
+    """Separate write-token host publishes ONLY fresh, strict model advice."""
+    issue, _, label = trusted_actor(api, context)
+    if label != PLAN_LABEL:
+        raise ValueError("Only an authenticated factory:plan event can publish advice.")
+    repo = context["repository"]
+    scope = parse_plan(issue, repo, context["workflow_sha"])
+    plans, claims = existing(api, repo, issue["number"])
+    if claims or not plans or plans[-1] != scope:
+        raise ValueError("The original issue scope snapshot is no longer current.")
+    if any(item["scope"] == scope for item in ai_plan_records(api, repo, issue["number"])):
+        raise ValueError("AI advice was already published; no duplicate paid-plan publication.")
+    proposal = plan_advice.validate(response, scope)
+    record = {"version": 1, "scope": scope, "plan_run_id": int(context["run_id"]),
+              "proposal": proposal, "digest": plan_advice.digest(proposal)}
+    publish_comment(api, repo, issue["number"], AI_PLAN_MARKER, record,
+                    plan_advice.display(scope, proposal, record["plan_run_id"]))
+    # No second POST after ambiguous responses. Independently re-read the record.
+    if current_ai_plan(api, repo, scope) != record:
+        raise ValueError("AI plan publication cannot be uniquely confirmed.")
+    return record
+
+
+
 def approve_label(api, context):
     issue, actor, label = trusted_actor(api, context)
     repo, number, base = context["repository"], issue["number"], context["workflow_sha"]
@@ -229,20 +290,27 @@ def approve_label(api, context):
     if claims:
         raise ValueError("Issue already has a durable Factory run claim; no automatic repeated paid work.")
     if label == PLAN_LABEL:
-        summary = ("### Software Factory plan (no model executed)\n\n"
+        if any(item == plan for item in plans):
+            raise ValueError("This exact issue/base was already planned; never repeat paid AI planning.")
+        summary = ("### Software Factory scope snapshot (Copilot plan requested)\n\n"
                    f"**Mode:** \x60{plan['repair_mode']}\x60\n\n"
                    "**Exact files:**\n" + "".join(f"- \x60{p}\x60\n" for p in plan["allowed_paths"]) +
                    "\n**Acceptance criteria:**\n" + "".join(f"{i}. {c}\n" for i, c in enumerate(plan["acceptance_criteria"], 1)) +
-                   "\nThis is a deterministic preview, not a Quality decision. Review it; "
-                   "add \x60factory:run\x60 **once** to authorize the paid build. "
-                   "Editing the issue or advancing \x60main\x60 invalidates this plan.")
+                   "\nThis is an immutable preflight snapshot, NOT the final implementation plan. "
+                   "Adding factory:plan explicitly requests a billable Copilot planning "
+                   "proposal; review the subsequent AI-assisted plan before factory:run. "
+                   "If AI planning fails, do not authorize implementation. "
+                   "Editing the issue or advancing the base invalidates this request.")
         publish_comment(api, repo, number, PLAN_MARKER, plan, summary)
-        return {"run": False, "issue_number": number, "plan": plan}
+        return {"run": False, "plan_requested": True, "issue_number": number, "plan": plan}
     if label != RUN_LABEL:
         raise ValueError("Only the explicit factory:run label may authorize implementation.")
     if not plans or plans[-1] != plan:
         raise ValueError("No current reviewed Factory plan for this exact issue and base. Reapply factory:plan.")
-    claim = {**plan, "run_id": int(context["run_id"]), "run_attempt": 1, "actor": actor}
+    approved_ai = current_ai_plan(api, repo, plan)
+    claim = {**plan, "ai_plan_sha256": approved_ai["digest"],
+             "ai_plan_run_id": approved_ai["plan_run_id"],
+             "run_id": int(context["run_id"]), "run_attempt": 1, "actor": actor}
     publish_comment(api, repo, number, CLAIM_MARKER, claim,
                     f"### Software Factory claimed (one-shot)\n\n"
                     f"Authorized by **{actor}** via \x60factory:run\x60 for exact issue #{number}, "
@@ -262,22 +330,47 @@ def verify_claim(api, context, actor):
     repo, number, base = context["repository"], issue["number"], context["workflow_sha"]
     plan = parse_plan(issue, repo, base)
     plans, claims = existing(api, repo, number)
-    expected = {**plan, "run_id": int(context["run_id"]), "run_attempt": 1, "actor": actor}
+    approved_ai = current_ai_plan(api, repo, plan)
+    expected = {**plan, "ai_plan_sha256": approved_ai["digest"],
+                "ai_plan_run_id": approved_ai["plan_run_id"],
+                "run_id": int(context["run_id"]), "run_attempt": 1, "actor": actor}
     if not plans or plans[-1] != plan or len(claims) != 1 or claims[0] != expected:
         raise ValueError("The current run has no unique, unchanged trusted Factory authorization.")
-    return plan
+    return {**plan, "advisory_plan": approved_ai["proposal"],
+            "ai_plan_sha256": approved_ai["digest"]}
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--candidate", help="Read-only pinned candidate checkout for AI planning context")
+    parser.add_argument("--publish-ai", action="store_true",
+                        help="Validate a model response and publish a human-reviewable proposal")
+    parser.add_argument("--proposal", help="Raw JSON response file, required for --publish-ai")
     args = parser.parse_args(argv)
     context = {name: os.environ[key] for name, key in {
         "repository":"GITHUB_REPOSITORY", "workflow_sha":"GITHUB_WORKFLOW_SHA",
         "ref":"GITHUB_REF", "event_name":"GITHUB_EVENT_NAME",
         "run_id":"GITHUB_RUN_ID", "run_attempt":"GITHUB_RUN_ATTEMPT"}.items()}
     try:
-        outcome = approve_label(automation.GitHubAPI(os.environ["GH_TOKEN"]), context)
+        api = automation.GitHubAPI(os.environ["GH_TOKEN"])
+        if args.publish_ai:
+            if not args.proposal:
+                raise ValueError("--publish-ai requires --proposal")
+            record = publish_ai_plan(api, context, plan_advice.read_file(args.proposal))
+            with open(args.out, "w", encoding="utf-8") as stream:
+                json.dump({"published": True, "digest": record["digest"]}, stream, sort_keys=True)
+            print(json.dumps({"published": True}))
+            return 0
+        outcome = approve_label(api, context)
+        if outcome.get("plan_requested"):
+            if not args.candidate:
+                raise ValueError("Planning needs the exact read-only candidate checkout.")
+            issue = api.get("repos/" + context["repository"]
+                            + "/issues/" + str(outcome["issue_number"]))
+            if issue_digest(issue) != outcome["plan"]["issue_digest"]:
+                raise ValueError("Issue changed between plan admission and prompt creation.")
+            outcome["planning_prompt"] = plan_advice.prompt(issue, outcome["plan"], args.candidate)
         with open(args.out, "w", encoding="utf-8") as stream:
             json.dump(outcome, stream, sort_keys=True, indent=2)
             stream.write("\n")
@@ -285,7 +378,8 @@ def main(argv=None):
         with open(output, "a", encoding="utf-8") as stream:
             # Exact one-line JSON: untrusted issue content never becomes a shell command.
             plan = outcome["plan"]
-            fields = {"authorized": "true" if outcome["run"] else "false",
+            fields = {"plan_requested": "true" if outcome.get("plan_requested") else "false",
+                      "authorized": "true" if outcome["run"] else "false",
                       "issue_number": str(outcome["issue_number"]),
                       "allowed_paths": canonical(plan["allowed_paths"]),
                       "acceptance_criteria": canonical(plan["acceptance_criteria"]),
