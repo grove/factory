@@ -594,7 +594,13 @@ def verify(repo, bundle, submission_path, agent_result, output, at=None):
 
 class SoftwareHost(automation.Host):
     def admitted(self):
-        repository, source = self.trusted_context(WORKFLOW, {"workflow_dispatch"})
+        label_event = self.context.get("event_name") == "issues"
+        # A label event can reach us only through the reviewed source caller.
+        # Its durable claim must exist BEFORE the model build is admitted, and
+        # must be reauthenticated by the trusted publisher on replay.
+        workflow = "sfstack-issue-label.yml" if label_event else WORKFLOW
+        repository, source = self.trusted_context(
+            workflow, {"issues"} if label_event else {"workflow_dispatch"})
         actor = source.get("triggering_actor", source.get("actor", {})).get("login", "")
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,38}", actor):
             raise ValueError("A human repository writer must dispatch this workflow.")
@@ -603,6 +609,10 @@ class SoftwareHost(automation.Host):
             raise ValueError("The dispatcher must have write, maintain, or admin repository permission.")
         if self.default_sha(repository["default_branch"]) != self.context["workflow_sha"]:
             raise ValueError("Default branch advanced; dispatch a fresh Software Factory run.")
+        self.label_plan = None
+        if label_event:
+            from integrations.github import issue_labels
+            self.label_plan = issue_labels.verify_claim(self.api, self.context, actor)
         return repository, source, actor
 
     def prepare(self, repo, issue_number, paths, acceptance, output, at=None,
@@ -610,6 +620,14 @@ class SoftwareHost(automation.Host):
         repository, _, actor = self.admitted()
         if not automation.positive(issue_number):
             raise ValueError("Expected a positive issue number.")
+        if self.label_plan is not None:
+            approved = self.label_plan
+            if (issue_number != approved["issue"]
+                    or sorted(paths) != approved["allowed_paths"]
+                    or acceptance != approved["acceptance_criteria"]
+                    or mode != approved["repair_mode"]
+                    or (regression_file or "") != approved["regression_file"]):
+                raise ValueError("Label run parameters differ from the approved immutable plan.")
         if git(repo, "rev-parse", "HEAD").decode().strip() != self.context["workflow_sha"]:
             raise ValueError("Controller checkout does not match the dispatched default revision.")
         issue = self.api.get(self.path(f"issues/{issue_number}"))
@@ -621,6 +639,14 @@ class SoftwareHost(automation.Host):
 
     def current(self, target):
         repository, _, actor = self.admitted()
+        if self.label_plan is not None:
+            approved = self.label_plan
+            if (target["issue"]["number"] != approved["issue"]
+                    or sorted(target["allowed_files"]) != approved["allowed_paths"]
+                    or [item["description"] for item in target["criteria"]] != approved["acceptance_criteria"]
+                    or target["mode"] != approved["repair_mode"]
+                    or (target.get("regression_file") or "") != approved["regression_file"]):
+                raise ValueError("Retained Software target is outside the claimed label plan.")
         current = issue_snapshot(self.api.get(self.path(f"issues/{target['issue']['number']}")), self.repository)
         if (current != target["issue"] or actor != target["actor"]
                 or repository["default_branch"] != target["base_branch"]
