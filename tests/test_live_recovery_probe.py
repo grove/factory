@@ -42,28 +42,17 @@ class LiveRecoveryBoundaryTests(unittest.TestCase):
                              api.post("repos/" + REPO + kind, {"safe": True}))
         self.assertEqual(Counter(), api.counts)
 
-    def test_workflows_are_manually_triggered_no_ai_and_isolated(self):
-        live = (ROOT / ".github/workflows/sfstack-live-recovery.yml").read_text()
-        noai = (ROOT / ".github/workflows" / NO_AI).read_text()
-        for content in (live, noai):
-            self.assertIn("  workflow_dispatch:", content)
-            self.assertNotIn("  pull_request:", content)
-            self.assertNotIn("pull_request_target:", content)
-            self.assertNotIn("  push:", content)
-            self.assertNotIn("COPILOT_GITHUB_TOKEN", content)
-            self.assertNotIn("sfstack-build.lock.yml", content)
-            self.assertNotIn("sfstack-review.lock.yml", content)
-        self.assertIn("github.actor == 'grove'", live)
-        self.assertIn("inputs.issue-number == 9", live)
-        self.assertIn("sfstack-quality-publication-", live)
-        self.assertIn("contents: write", live)
-        self.assertIn("pull-requests: write", live)
-        self.assertIn("checks: write", live)
-        self.assertIn("actions: write", live)
-        self.assertIn("\npermissions: {}\n", noai)
-        self.assertNotIn("checks: write", noai)
-        self.assertNotIn("actions: write", noai)
-        self.assertIn("sleep 60", noai)
+    def test_live_probe_workflows_are_retired_with_permanent_audit(self):
+        # The temporary write-capable acceptance workflows must no longer
+        # be deployable from the protected default branch.
+        self.assertFalse((ROOT / ".github/workflows/sfstack-live-recovery.yml").exists())
+        self.assertFalse((ROOT / ".github/workflows" / NO_AI).exists())
+        record = (ROOT / "docs/evidence/live-recovery-2026-11-23.md").read_text()
+        self.assertIn("45144342739", record)
+        self.assertIn("d3a66e308c3308e1fa1b52649ec5ef6b94b0957f5b5041f5053ecb8b5d45b618", record)
+        self.assertIn("not a physical network partition", record)
+        archive_manifest = ROOT / "docs/evidence/live-recovery-2026-11-23-manifest.json"
+        self.assertTrue(archive_manifest.is_file())
 
     def test_dummy_scope_and_nonapproval_cleanup_are_explicit(self):
         self.assertEqual(REPO, "grove/factory")

@@ -1,0 +1,54 @@
+{
+  "artifacts": [
+    {
+      "filename": "negative-first-attempt-45139424060.zip",
+      "github_artifact_id": 14802465086,
+      "run": 45139424060,
+      "sha256": "6a32cf8a1f49778d09f8b7be72afd47b28851148545f2693abbee0fc1c4ba50c",
+      "size_bytes": 773
+    },
+    {
+      "filename": "successful-inputs-45144342739.zip",
+      "github_artifact_id": 14803562582,
+      "run": 45144342739,
+      "sha256": "ba098de0dba3762231c1d3a8ec690add7af81c57df6a83d2cf1a6e33748ff12c",
+      "size_bytes": 7919
+    },
+    {
+      "filename": "successful-verification-45144342739.zip",
+      "github_artifact_id": 14803677399,
+      "run": 45144342739,
+      "sha256": "16a1fe14832fe47cdaf6139f253ea942d53468aeb796eba3f98584b6d8126436",
+      "size_bytes": 12852
+    },
+    {
+      "filename": "successful-post-ack-proof-45144342739.zip",
+      "github_artifact_id": 14804205210,
+      "run": 45144342739,
+      "sha256": "a647714ed69adb5921643e4c7bed9743b675a9d37bcb2bdc0c0b011db9cb0212",
+      "size_bytes": 1027
+    }
+  ],
+  "content_validation": "Original ZIPs are preserved byte-for-byte in the offline bundle; six evidence SHA-256 values were independently verified against gate.json and the live proof.",
+  "created_date": "2026-11-23",
+  "failed_run": 45139424060,
+  "fault_model": "client suppressed the response after actual acknowledged GitHub writes; NOT a physical network partition",
+  "kind": "grove-factory-live-post-ack-response-loss-archive",
+  "no_ai_check": 137591493355,
+  "no_ai_run": 45144866988,
+  "offline_bundle_filename": "factory-live-recovery-evidence-2026-11-23.zip",
+  "offline_bundle_sha256": "d3a66e308c3308e1fa1b52649ec5ef6b94b0957f5b5041f5053ecb8b5d45b618",
+  "retained_evidence_sha256": {
+    "candidate.json": "d9ae74dab39b8a22cc700936af8b5597f600241573fc1f36ad4acfb18f66f46c",
+    "change-set.json": "9649829729e80bbf2b5af316d3e70ca0e67f646cca40cd882a0bea01773147f9",
+    "diff.patch": "69b3faee44a14f1f908e9276c225c93d3d8171ce81667ce5650081f8e98d39bb",
+    "proposal.json": "7bb4cffe56b5e00a5836ba4a41307f918ba813040524fb3b9cffcdfcc19a139d",
+    "submission.json": "1b284879539f402f9f6ac55346a296f6499415b00b555dc8800824adec0440fa",
+    "verification-report.json": "3edade44c7f8b0ab710e3fbb29ad69c8a9a0696c8168207c04cf2e921a1a91c4"
+  },
+  "source": "grove/factory",
+  "success_base_sha": "32b58d7af36b03f9a735e5f86586a68f6f920e0f",
+  "success_candidate_sha": "414dce97f93721d6f789adbf88dfc0ce121cb848",
+  "success_draft_pr": 11,
+  "success_run": 45144342739
+}
