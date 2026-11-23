@@ -50,6 +50,29 @@ class PlanAdviceTests(unittest.TestCase):
         self.assertIn("not new authorization", markdown)
         self.assertNotIn("Existing behavior must fail the new assertion", markdown)
 
+    def test_prompt_explicitly_bounds_model_field_lengths(self):
+        # The first live model result contained a 553-character action while
+        # the strict independent validator only allows 550. Make the model's
+        # instruction contract tighter than the host's non-negotiable bounds.
+        issue = {
+            "number": 7, "state": "open", "title": "defect: public answer",
+            "body": "Fix the observed wrong result with a bounded regression.",
+            "updated_at": "2026-11-23T12:00:00Z",
+        }
+        with tempfile.TemporaryDirectory() as td:
+            (Path(td) / "examples").mkdir()
+            (Path(td) / "examples/answer.py").write_text("answer = 41\\n")
+            text = plan_advice.prompt(issue, SCOPE, td)
+        self.assertIn("no more than 400 characters", text)
+        self.assertIn("no more than 300 characters", text)
+        self.assertIn("No multiline strings", text)
+        overlong = {**PROPOSAL, "steps": [
+            {**PROPOSAL["steps"][0], "action": "A" * 551},
+            PROPOSAL["steps"][1],
+        ]}
+        with self.assertRaisesRegex(ValueError, "excessive"):
+            plan_advice.validate(json.dumps(overlong), SCOPE)
+
     def test_malformed_duplicates_and_out_of_scope_are_rejected(self):
         cases = [
             "not json",

@@ -70,6 +70,29 @@ class OnboardRepositoryTests(unittest.TestCase):
         self.assertIn("Generate actionable Copilot implementation proposal", label)
         self.assertIn("Independently validate and publish", label)
 
+    def test_ai_plan_publisher_bootstraps_its_own_locked_runtime(self):
+        # The first live Copilot plan succeeded, but publication failed because
+        # a fresh runner imported software.py without the jsonschema dependency.
+        # Each job is a separate Python environment; authorizer installs do not
+        # carry over into publish_plan.
+        label = onboarding.render("example/repo", "main", FACTORY_REVISION)[
+            ".github/workflows/sfstack-issue-label.yml"
+        ]
+        authorize = label.split("\n  authorize:\n", 1)[1].split("\n  plan:\n", 1)[0]
+        model = label.split("\n  plan:\n", 1)[1].split("\n  publish_plan:\n", 1)[0]
+        publisher = label.split("\n  publish_plan:\n", 1)[1].split("\n  software:\n", 1)[0]
+        bootstrap = "python controller/tools/bootstrap_contracts.py"
+        self.assertIn(bootstrap, authorize)
+        self.assertEqual(1, publisher.count(bootstrap))
+        self.assertLess(publisher.index("actions/setup-python@"), publisher.index(bootstrap))
+        self.assertLess(publisher.index(bootstrap), publisher.index("--publish-ai"))
+        self.assertIn("issues: write", publisher)
+        self.assertIn("contents: read", publisher)
+        self.assertNotIn("contents: write", publisher)
+        self.assertNotIn("COPILOT_GITHUB_TOKEN", publisher)
+        self.assertIn("COPILOT_GITHUB_TOKEN", model)
+        self.assertNotIn("issues: write", model)
+
     def test_custom_default_branch_is_escaped_and_exact(self):
         files = onboarding.render("another/target-repo", "release/v2", FACTORY_REVISION)
         self.assertIn('branches: ["release/v2"]', files[".github/workflows/sfstack-quality-events.yml"])

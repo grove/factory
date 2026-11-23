@@ -89,7 +89,12 @@ def prompt(issue, scope, candidate):
         '"risks":["specific risk or limitation"],"questions":'
         '["genuine open question, or empty array"]}. '
         "Use 1-12 steps, exactly one verification method per criterion, "
-        "1-6 risks, 0-5 questions, no multiline strings. "
+        "1-6 risks, and 0-5 questions. Keep EACH step action and EACH "
+        "verification method to no more than 400 characters; each risk "
+        "and question must be no more than 300 characters. The strict "
+        "host validator has tighter maximum lengths than unconstrained prose, "
+        "so prefer concise, specific methods over exhaustive instructions. "
+        "No multiline strings. "
         "Scope and source DATA JSON follows:\n"
     )
     result = instruction + canonical(data)
