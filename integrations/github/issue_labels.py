@@ -2,8 +2,9 @@
 """Maintainer-approved, one-shot issue-label handoff to Software Factory.
 
 The default-branch workflow authenticates immutable issue scope and records
-only human-authorized claims. An isolated Copilot job produces *advice*;
-only this trusted host validates/publishes it. No agent publishes or merges.
+only human-authorized claims. Optional Copilot planning produces *advice*;
+the trusted host validates/publishes it, never the agent. A human factory:run
+may instead claim an exact direct build without an AI plan. No agent merges.
 """
 from __future__ import annotations
 
@@ -305,18 +306,40 @@ def approve_label(api, context):
         return {"run": False, "plan_requested": True, "issue_number": number, "plan": plan}
     if label != RUN_LABEL:
         raise ValueError("Only the explicit factory:run label may authorize implementation.")
-    if not plans or plans[-1] != plan:
-        raise ValueError("No current reviewed Factory plan for this exact issue and base. Reapply factory:plan.")
-    approved_ai = current_ai_plan(api, repo, plan)
-    claim = {**plan, "ai_plan_sha256": approved_ai["digest"],
-             "ai_plan_run_id": approved_ai["plan_run_id"],
-             "run_id": int(context["run_id"]), "run_attempt": 1, "actor": actor}
-    publish_comment(api, repo, number, CLAIM_MARKER, claim,
-                    f"### Software Factory claimed (one-shot)\n\n"
-                    f"Authorized by **{actor}** via \x60factory:run\x60 for exact issue #{number}, "
-                    f"run [{context['run_id']}](https://github.com/{repo}/actions/runs/{context['run_id']}). "
-                    "This claim is permanent; removing/reapplying the label or rerunning the job "
-                    "must not start another paid build. Any failed attempt needs human reconciliation.")
+    if plans:
+        # A planning request, even one whose model or publisher failed, must
+        # never silently fall back to a direct build.
+        if plans[-1] != plan:
+            raise ValueError("No current reviewed Factory plan for this exact issue and base. Reapply factory:plan.")
+        approved_ai = current_ai_plan(api, repo, plan)
+        claim = {**plan, "ai_plan_sha256": approved_ai["digest"],
+                 "ai_plan_run_id": approved_ai["plan_run_id"],
+                 "run_id": int(context["run_id"]), "run_attempt": 1, "actor": actor}
+    else:
+        # No planning was requested. The writer's factory:run label itself
+        # authorizes this *one* paid build, not an additional paid AI plan.
+        # Any orphaned AI advice/history is a conflict, not a bypass route.
+        if any(item.get("name") == PLAN_LABEL for item in issue.get("labels", [])):
+            raise ValueError("factory:plan is present without approved advice; direct run is blocked.")
+        if ai_plan_records(api, repo, number):
+            raise ValueError("AI planning history without a trusted scope snapshot; direct run is blocked.")
+        claim = {**plan, "planning_mode": "direct",
+                 "run_id": int(context["run_id"]), "run_attempt": 1, "actor": actor}
+    message = (f"### Software Factory claimed (one-shot)\n\n"
+               f"Authorized by **{actor}** via `factory:run` for exact issue #{number}, "
+               f"run [{context['run_id']}](https://github.com/{repo}/actions/runs/{context['run_id']}). "
+               "This claim is permanent; removing/reapplying the label or rerunning the job "
+               "must not start another paid build. Any failed attempt needs human reconciliation.")
+    if not plans:
+        message += ("\n\n**Direct build (no separate AI plan):** The writer authorized "
+                    "implementation against this deterministic scope without a paid "
+                    "planning step. Independent verification, draft PR and human merge "
+                    "are still required.\n\n**Exact files:**\n"
+                    + "".join(f"- `{path}`\n" for path in plan["allowed_paths"])
+                    + "\n**Acceptance criteria:**\n"
+                    + "".join(f"{index}. {criterion}\n" for index, criterion in
+                              enumerate(plan["acceptance_criteria"], 1)))
+    publish_comment(api, repo, number, CLAIM_MARKER, claim, message)
     _, observed = existing(api, repo, number)
     if len(observed) != 1 or observed[0] != claim:
         raise ValueError("Issue claim is not uniquely read back after write; do not dispatch the model.")
@@ -330,14 +353,29 @@ def verify_claim(api, context, actor):
     repo, number, base = context["repository"], issue["number"], context["workflow_sha"]
     plan = parse_plan(issue, repo, base)
     plans, claims = existing(api, repo, number)
-    approved_ai = current_ai_plan(api, repo, plan)
-    expected = {**plan, "ai_plan_sha256": approved_ai["digest"],
-                "ai_plan_run_id": approved_ai["plan_run_id"],
-                "run_id": int(context["run_id"]), "run_attempt": 1, "actor": actor}
-    if not plans or plans[-1] != plan or len(claims) != 1 or claims[0] != expected:
+    if len(claims) != 1:
         raise ValueError("The current run has no unique, unchanged trusted Factory authorization.")
-    return {**plan, "advisory_plan": approved_ai["proposal"],
-            "ai_plan_sha256": approved_ai["digest"]}
+    common = {"run_id": int(context["run_id"]), "run_attempt": 1, "actor": actor}
+    if claims[0].get("planning_mode") == "direct":
+        # Direct-mode claims cannot reclassify a failed, stale, or pending
+        # factory:plan attempt as an approved unplanned build.
+        if (plans or ai_plan_records(api, repo, number)
+                or any(item.get("name") == PLAN_LABEL for item in issue.get("labels", []))):
+            raise ValueError("Direct run cannot bypass an earlier AI planning request.")
+        expected = {**plan, "planning_mode": "direct", **common}
+        advisory, digest = None, None
+    else:
+        if not plans or plans[-1] != plan:
+            raise ValueError("The current run has no unique, unchanged trusted Factory authorization.")
+        approved_ai = current_ai_plan(api, repo, plan)
+        expected = {**plan, "ai_plan_sha256": approved_ai["digest"],
+                    "ai_plan_run_id": approved_ai["plan_run_id"], **common}
+        advisory, digest = approved_ai["proposal"], approved_ai["digest"]
+    if claims[0] != expected:
+        raise ValueError("The current run has no unique, unchanged trusted Factory authorization.")
+    # The existing Software host requires these keys and rechecks them against
+    # the builder's pinned target. None means *absence*, not fake AI approval.
+    return {**plan, "advisory_plan": advisory, "ai_plan_sha256": digest}
 
 
 def main(argv=None):

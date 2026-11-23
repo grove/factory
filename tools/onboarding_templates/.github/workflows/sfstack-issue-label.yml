@@ -1,8 +1,9 @@
 name: sfstack issue-label Software Factory
 
-# Issue prose is untrusted. A writer's event creates an immutable scope record.
-# factory:plan explicitly spends one Copilot planning call, never implements.
-# Only separately validated AI advice and the human factory:run label may build.
+# Issue prose is untrusted. A writer's label creates a durable scoped claim.
+# factory:plan is optional paid AI advice; it never starts implementation.
+# factory:run authorizes one paid build, directly if no plan was requested,
+# or only after a separately validated AI plan when planning was requested.
 on:
   issues:
     types: [labeled]
@@ -18,7 +19,7 @@ concurrency:
 
 jobs:
   authorize:
-    name: Validate actual human labeler and exact plan; claim before build
+    name: Validate human labeler and exact issue scope; claim before build
     if: >-
       github.repository == '__SFSTACK_TARGET_REPOSITORY__' &&
       (github.event.label.name == 'factory:plan' || github.event.label.name == 'factory:run') &&
@@ -46,6 +47,7 @@ jobs:
           path: controller
           persist-credentials: false
       - name: Checkout default-branch source solely for bounded read-only planning excerpts
+        if: github.event.label.name == 'factory:plan'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: ${{ github.repository }}
