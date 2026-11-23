@@ -1,5 +1,7 @@
 # Launch Software Factory from GitHub issue labels
 
+**New target repository?** Install the SHA-pinned issue/Quality callers first using the [guided onboarding walkthrough](../getting-started-new-repository.md). This guide describes operating the feature *after* deployment.
+
 The ordinary GitHub Software Factory can also accept a **reviewed issue plan**
 and one explicit **human-applied label**. This avoids retyping the old
 multi-parameter `workflow_dispatch` form, while retaining exact path scope,

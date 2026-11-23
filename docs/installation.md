@@ -1,5 +1,7 @@
 # Install and validate factory
 
+**Installing into a new GitHub repository?** Start with the [guided, reviewable onboarding walkthrough](getting-started-new-repository.md). It renders the tested thin callers, protects exact SHA pins, and refuses unsafe overwrites. The supported initial target profile is Python 3.13 with standard-library unittest; other test stacks need a separate reviewed host policy. The historical workflows described below remain useful as reference material, but new adopters should use the walkthrough first.
+
 The supported deployment is a **caller-scoped GitHub Actions host**, installed locally or invoked through SHA-pinned reusable Factory workflows.
 The workflow run, issue or pull request, credentials, controller revision, and
 published check all belong to the repository containing the integration. Moving
@@ -213,8 +215,7 @@ The bounded Software Factory workflow can be called by a **thin**
 **full, reviewed Factory commit SHA** (never a mutable branch), just as for
 Quality. The operator dispatches the caller from its **default branch** and
 selects an open issue, 1–8 exact allowed paths, explicit acceptance criteria,
-and `change` or `defect` mode. There are **no automatic issue triggers**;
-issue text cannot choose additional files or widen repository permissions.
+and `change` or `defect` mode. The manual caller described here has **no** automatic issue trigger. A separate reviewed and immutable [issue-label caller](how-to/issue-label-software-factory.md) can authenticate human-applied `factory:plan` / `factory:run` labels; issue text still cannot choose additional files or widen repository permissions.
 
 Factory's `sfstack-software.yml` provides both `workflow_dispatch` for
 same-repository use and `workflow_call` for reuse. The controller checkouts
