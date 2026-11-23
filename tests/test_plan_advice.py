@@ -47,7 +47,7 @@ class PlanAdviceTests(unittest.TestCase):
         self.assertIn("Proposed verification", markdown)
         self.assertIn("Risks and limitations", markdown)
         self.assertIn("Open questions", markdown)
-        self.assertIn("does not", "This is a proposed how, not an accepted authorization".lower())
+        self.assertIn("not new authorization", markdown)
         self.assertNotIn("Existing behavior must fail the new assertion", markdown)
 
     def test_malformed_duplicates_and_out_of_scope_are_rejected(self):
