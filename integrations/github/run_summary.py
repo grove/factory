@@ -205,6 +205,13 @@ def mode_for(reads, run, number, label, issue):
         return {"mode": "unknown", "claim": "missing-or-unverified"}
     claim = exact[0]
     current = claim.get("issue_digest") == issue_labels.issue_digest(issue)
+    scope = {k: v for k, v in claim.items() if k not in {
+        "planning_mode", "ai_plan_sha256", "ai_plan_run_id", "run_id", "run_attempt", "actor"}}
+    if (set(scope) != {"version", "repository", "issue", "issue_digest", "base_sha",
+                       "allowed_paths", "acceptance_criteria", "repair_mode", "regression_file"}
+            or not isinstance(scope["issue_digest"], str)
+            or not automation.INTENT_DIGEST.fullmatch(scope["issue_digest"])):
+        return {"mode": "unknown", "claim": "malformed-scope"}
     records = issue_labels.ai_plan_records(reads, reads.repo, number)
     if claim.get("planning_mode") == "direct" and not plans and not records and not {
             "ai_plan_sha256", "ai_plan_run_id"} & claim.keys():
@@ -220,7 +227,8 @@ def mode_for(reads, run, number, label, issue):
                         and p["plan_run_id"] == claim.get("ai_plan_run_id")]
             if claim == expected and len(matching) == 1:
                 return {"mode": "planned", "claim": "recorded", "issue_text_matches_claim": current,
-                        "planning_run": url(reads.repo, claim["ai_plan_run_id"])}
+                        "planning_run": url(reads.repo, claim["ai_plan_run_id"]),
+                        "planning_run_id": claim["ai_plan_run_id"]}
     return {"mode": "unknown", "claim": "conflicting-planning-history"}
 
 
@@ -290,6 +298,26 @@ def summarize(api, repo, run_id, usage_zip=None, quality_usage_zip=None):
               "quality": {"state": "not-applicable" if label == "factory:plan" else "unknown"},
               "merge_authorized": False}
     report["failure_stages"] = [j["name"] for j in jobs if j["state"] == "failed"]
+    report["stages"] = {
+        "planning": matching_job(jobs, "Generate actionable Copilot implementation proposal (paid, no writes)"),
+        "plan_publication": matching_job(jobs, "Revalidate exact issue and publish bounded human-reviewable plan"),
+        "implementation": matching_job(jobs, "Implement through Agentic Workflows / agent"),
+        "verification": matching_job(jobs, "Apply and verify the bounded proposal"),
+        "draft_publication": matching_job(jobs, "Open a draft PR and request quality assessment"),
+    }
+    if mode["mode"] == "planned":
+        previous = reads.run(mode["planning_run_id"], LABEL_PATH, "issues", branch)
+        require(previous["run_attempt"] == 1 and previous["head_sha"] == run["head_sha"]
+                and previous.get("display_title") == f"sfstack issue #{number} / factory:plan",
+                "Planning run identity does not match the claim.")
+        previous_jobs = reads.jobs(previous)
+        report["planning"] = {"run_id": previous["id"], "attempt": 1,
+                              "url": url(repo, previous["id"]), "state": state(previous),
+                              "jobs": previous_jobs, "artifacts": reads.artifacts(previous)}
+        if (state(previous) != "successful"
+                or matching_job(previous_jobs, "Generate actionable Copilot implementation proposal (paid, no writes)") != "successful"
+                or matching_job(previous_jobs, "Revalidate exact issue and publish bounded human-reviewable plan") != "successful"):
+            report["claim"] = "planning-run-not-confirmed"
     if label == "factory:run":
         ref = f"sfstack/issue-{number}-{run_id}-{run['run_attempt']}"
         query = urlencode({"state": "all", "head": repo.split("/")[0] + ":" + ref})
@@ -310,6 +338,8 @@ def summarize(api, repo, run_id, usage_zip=None, quality_usage_zip=None):
                             "build_evidence": retained, "evidence_link_matches": linked}
             tip = reads.host.default_sha(branch)
             report["quality"] = quality(reads, pr, branch, tip, quality_usage_zip)
+            report["failure_stages"] += [j["name"] for j in report["quality"].get("jobs", [])
+                                         if j["state"] == "failed"]
     if report["failure_stages"] or report["workflow_state"] == "failed":
         recovery = "Inspect failed jobs and retained evidence; reconcile any prior writes. Never replay a claimed paid attempt."
     elif report["workflow_state"] == "pending":
@@ -321,7 +351,9 @@ def summarize(api, repo, run_id, usage_zip=None, quality_usage_zip=None):
         recovery = "Inspect the durable claim and publication evidence; do not relabel or assume a successful build."
     elif report["pr"]["state"] == "merged":
         recovery = "Historical merged PR; retain evidence and inspect post-merge CI. No retry."
-    elif report["quality"]["state"] == "successful":
+    elif (report["quality"]["state"] == "successful"
+          and report["pr"]["evidence_link_matches"]
+          and report["stages"]["verification"] == report["stages"]["draft_publication"] == "successful"):
         recovery = "Review the current PR and ordinary required checks; only a human may merge."
     else:
         recovery = "Inspect the independent Quality result and required CI; no merge or automatic retry."
