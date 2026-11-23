@@ -39,8 +39,15 @@ Other languages, test runners, dependency-heavy projects and broader edit scopes
 
 Factory owns GitHub events, authorization, credentials, independent candidate execution, durable publication and recovery. sfstack owns the portable skills, schemas, recipes and policy engine. Factory consumes sfstack through its installed, versioned public CLI, not private module imports. Your issues, PRs, checks, credentials and evidence remain in your repository.
 
+<a id="validate-locally"></a>
+<a id="execution-boundaries"></a>
+
 For maintainer setup and deterministic regressions, see [Install and validate the host](docs/installation.md). For security and integration details, see [Architecture and trust boundaries](docs/explanation/trust-boundaries.md).
 
+<a id="provenance"></a>
+
 [Historical evidence and migration](docs/history.md) records the pilot results and their limitations. It is not a setup procedure.
+
+<a id="license"></a>
 
 [Apache License 2.0](LICENSE).
