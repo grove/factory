@@ -60,7 +60,7 @@ class LiveRecoveryBoundaryTests(unittest.TestCase):
         self.assertIn("pull-requests: write", live)
         self.assertIn("checks: write", live)
         self.assertIn("actions: write", live)
-        self.assertIn("  permissions: {}", noai)
+        self.assertIn("\npermissions: {}\n", noai)
         self.assertNotIn("checks: write", noai)
         self.assertNotIn("actions: write", noai)
         self.assertIn("sleep 60", noai)
