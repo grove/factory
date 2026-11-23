@@ -96,6 +96,11 @@ class IssueLabelTests(unittest.TestCase):
         self.api.issue["labels"].append({"name": "factory:run"})
         self.write_event()
 
+    def mark_direct_run(self):
+        self.mark_run()
+        # No factory:plan label or prior bot snapshot for the direct route.
+        self.api.issue["labels"] = [{"name": "factory:run"}]
+
     def fake_ai(self):
         proposal = {
             "version": 1,
@@ -162,9 +167,99 @@ class IssueLabelTests(unittest.TestCase):
                          claimed["plan"]["acceptance_criteria"], Path(self.tmp.name) / "out",
                          mode="defect", regression_file="tests/test_answer.py")
 
-    def test_run_without_prior_plan_cannot_start_a_model(self):
+    def test_direct_run_claims_exact_scope_without_separate_paid_planning(self):
+        from integrations.github import software
+        self.mark_direct_run()
+        with patch.object(issue_labels, "current_ai_plan",
+                          side_effect=AssertionError("Direct mode must not require a paid AI plan")):
+            authorized = issue_labels.approve_label(self.api, self.context)
+            verified = issue_labels.verify_claim(self.api, self.context, "maintainer")
+            host = software.SoftwareHost(self.api, self.context)
+            repository, _, actor = host.admitted()
+        self.assertTrue(authorized["run"])
+        self.assertNotIn("plan_requested", authorized)
+        self.assertEqual(1, len(self.api.posts))
+        claim = issue_labels.parse_marker(self.api.comments[0], issue_labels.CLAIM_MARKER)
+        self.assertEqual("direct", claim["planning_mode"])
+        self.assertNotIn("ai_plan_sha256", claim)
+        self.assertNotIn("ai_plan_run_id", claim)
+        self.assertIn("Direct build (no separate AI plan)", self.api.comments[0]["body"])
+        self.assertEqual({**authorized["plan"], "advisory_plan": None,
+                          "ai_plan_sha256": None}, verified)
+        self.assertEqual(verified, host.label_plan)
+        self.assertEqual("maintainer", actor)
+        self.assertEqual("main", repository["default_branch"])
+        with self.assertRaisesRegex(ValueError, "already has a durable Factory run claim"):
+            issue_labels.approve_label(self.api, self.context)
+        self.assertEqual(1, len(self.api.posts))
+
+    def test_direct_run_refuses_existing_plan_label_without_publication(self):
+        # An in-flight or failed factory:plan label is not permission to
+        # silently skip paid planning and start implementation.
         self.mark_run()
-        with self.assertRaisesRegex(ValueError, "No current reviewed Factory plan"):
+        with self.assertRaisesRegex(ValueError, "factory:plan is present"):
+            issue_labels.approve_label(self.api, self.context)
+        self.assertFalse(self.api.posts)
+
+    def test_direct_run_rechecks_issue_base_identity_and_label(self):
+        self.mark_direct_run()
+        issue_labels.approve_label(self.api, self.context)
+        original_body = self.api.issue["body"]
+        self.api.issue["body"] += "\nExtra unreviewed requirement.\n"
+        with self.assertRaises(ValueError):
+            issue_labels.verify_claim(self.api, self.context, "maintainer")
+        self.api.issue["body"] = original_body
+        self.api.branch = "f" * 40
+        with self.assertRaisesRegex(ValueError, "Default branch advanced"):
+            issue_labels.verify_claim(self.api, self.context, "maintainer")
+        self.api.branch = BASE
+        self.context["run_id"] = "1235"
+        with self.assertRaisesRegex(ValueError, "unique, unchanged trusted Factory authorization"):
+            issue_labels.verify_claim(self.api, self.context, "maintainer")
+        self.context["run_id"] = "1234"
+        self.api.issue["labels"].append({"name": "factory:plan"})
+        with self.assertRaisesRegex(ValueError, "earlier AI planning request"):
+            issue_labels.verify_claim(self.api, self.context, "maintainer")
+
+    def test_direct_run_rejects_forged_or_duplicate_bot_claim(self):
+        self.mark_direct_run()
+        issue_labels.approve_label(self.api, self.context)
+        valid = deepcopy(self.api.comments[0])
+        self.api.comments[0]["user"] = {"login": "forger", "type": "User"}
+        with self.assertRaisesRegex(ValueError, "unique, unchanged trusted Factory authorization"):
+            issue_labels.verify_claim(self.api, self.context, "maintainer")
+        self.api.comments[0] = valid
+        self.api.comments.append(deepcopy(valid))
+        with self.assertRaisesRegex(ValueError, "unique, unchanged trusted Factory authorization"):
+            issue_labels.verify_claim(self.api, self.context, "maintainer")
+
+    def test_direct_run_does_not_downgrade_failed_or_orphaned_ai_planning(self):
+        issue_labels.approve_label(self.api, self.context)
+        self.mark_run()
+        self.api.issue["labels"] = [{"name": "factory:run"}]
+        with self.assertRaisesRegex(ValueError, "Missing or ambiguous validated AI plan"):
+            issue_labels.approve_label(self.api, self.context)
+        self.assertEqual(1, len(self.api.posts))
+        # Even if the original snapshot is absent, an orphaned authenticated
+        # AI-plan comment is not evidence that the direct route was chosen.
+        self.api.issue["labels"] = [{"name": "factory:plan"}]
+        self.payload["label"]["name"] = "factory:plan"
+        self.write_event()
+        self.fake_ai()
+        self.api.comments = [c for c in self.api.comments if not c["body"].startswith(
+            issue_labels.PLAN_MARKER)]
+        self.mark_direct_run()
+        with self.assertRaisesRegex(ValueError, "AI planning history"):
+            issue_labels.approve_label(self.api, self.context)
+
+    def test_direct_run_still_requires_writer_and_first_attempt(self):
+        self.mark_direct_run()
+        self.api.permission = "read"
+        with self.assertRaisesRegex(ValueError, "repository writer"):
+            issue_labels.approve_label(self.api, self.context)
+        self.api.permission = "write"
+        self.context["run_attempt"] = "2"
+        with self.assertRaisesRegex(ValueError, "first issue event attempt"):
             issue_labels.approve_label(self.api, self.context)
         self.assertFalse(self.api.posts)
 
